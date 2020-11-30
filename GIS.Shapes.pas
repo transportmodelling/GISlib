@@ -171,6 +171,7 @@ end;
 
 Procedure TGISShape.AssignPolyPolygon(const Points: TMultiPoints);
 begin
+  try
   Clear;
   FShapeType := stPolygon;
   SetLength(FPoints,Length(Points));
@@ -183,9 +184,12 @@ begin
       FBoundingBox.Enclose(Points[Part,Point]);
     end;
     // Close polygon
-    if (FPoints[0,0].X <> FPoints[0,Length(Points)-1].X)
-    or (FPoints[0,0].Y <> FPoints[0,Length(Points)-1].Y) then
+    if (FPoints[Part,0].X <> FPoints[Part,PointsCount(Part)-1].X)
+    or (FPoints[Part,0].Y <> FPoints[Part,PointsCount(Part)-1].Y) then
     FPoints[Part] := FPoints[Part] + [FPoints[Part,0]];
+  end;
+  except
+    Beep;
   end;
 end;
 
