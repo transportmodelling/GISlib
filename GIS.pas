@@ -30,6 +30,7 @@ Type
     Function Width: Float64;
     Function Height: Float64;
     Function CenterPoint: TCoordinate;
+    Function Scale(Factor: Float64): TCoordinateRect;
     Function IntersectsWith(const [ref] Rect: TCoordinateRect): Boolean;
   end;
 
@@ -92,6 +93,16 @@ Function TCoordinateRect.CenterPoint: TCoordinate;
 begin
   Result.X := (Left+Right)/2;
   Result.Y := (Top+Bottom)/2;
+end;
+
+Function TCoordinateRect.Scale(Factor: Float64): TCoordinateRect;
+begin
+  var CenterX := (Left+Right)/2;
+  var CenterY := (Top+Bottom)/2;
+  Result.Left := CenterX - Factor*(CenterX-Left);
+  Result.Right := CenterX + Factor*(Right-CenterX);
+  Result.Bottom := CenterY - Factor*(CenterY-Bottom);
+  Result.Top := CenterY + Factor*(Top-CenterY);
 end;
 
 Function TCoordinateRect.IntersectsWith(const [ref] Rect: TCoordinateRect): Boolean;

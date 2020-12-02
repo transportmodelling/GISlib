@@ -130,11 +130,14 @@ begin
   Clear;
   FShapeType := stLine;
   SetLength(FPoints,1,Length(Points));
-  for var Point := low(Points) to high(Points) do
-  begin
-    FPoints[0,Point] := Points[Point];
-    FBoundingBox.Enclose(Points[Point]);
-  end;
+  if Length(Points) > 1 then
+    for var Point := 0 to Length(Points)-1 do
+    begin
+      FPoints[0,Point] := Points[Point];
+      FBoundingBox.Enclose(Points[Point]);
+    end
+  else
+    raise Exception.Create('Invalid poly line');
 end;
 
 Procedure TGISShape.AssignPolyLine(const Points: TMultiPoints);
@@ -145,11 +148,14 @@ begin
   for var Part := 0 to PartsCount-1 do
   begin
     SetLength(FPoints[Part],Length(Points[Part]));
-    for var Point := 0 to PointsCount(Part)-1 do
-    begin
-      FPoints[Part,Point] := Points[Part,Point];
-      FBoundingBox.Enclose(Points[Part,Point]);
-    end;
+    if PointsCount(Part) > 1 then
+      for var Point := 0 to PointsCount(Part)-1 do
+      begin
+        FPoints[Part,Point] := Points[Part,Point];
+        FBoundingBox.Enclose(Points[Part,Point]);
+      end
+    else
+      raise Exception.Create('Invalid poly line');
   end;
 end;
 
@@ -158,11 +164,14 @@ begin
   Clear;
   FShapeType := stPolygon;
   SetLength(FPoints,1,Length(Points));
-  for var Point := low(Points) to high(Points) do
-  begin
-    FPoints[0,Point] := Points[Point];
-    FBoundingBox.Enclose(Points[Point]);
-  end;
+  if Length(Points) > 2 then
+    for var Point := 0 to Length(Points)-1 do
+    begin
+      FPoints[0,Point] := Points[Point];
+      FBoundingBox.Enclose(Points[Point]);
+    end
+  else
+    raise Exception.Create('Invalid polygon');
   // Close polygon
   if (FPoints[0,0].X <> FPoints[0,Length(Points)-1].X)
   or (FPoints[0,0].Y <> FPoints[0,Length(Points)-1].Y) then
@@ -171,25 +180,24 @@ end;
 
 Procedure TGISShape.AssignPolyPolygon(const Points: TMultiPoints);
 begin
-  try
   Clear;
   FShapeType := stPolygon;
   SetLength(FPoints,Length(Points));
   for var Part := 0 to PartsCount-1 do
   begin
     SetLength(FPoints[Part],Length(Points[Part]));
-    for var Point := 0 to PointsCount(Part)-1 do
-    begin
-      FPoints[Part,Point] := Points[Part,Point];
-      FBoundingBox.Enclose(Points[Part,Point]);
-    end;
+    if PointsCount(Part) > 2 then
+      for var Point := 0 to PointsCount(Part)-1 do
+      begin
+        FPoints[Part,Point] := Points[Part,Point];
+        FBoundingBox.Enclose(Points[Part,Point]);
+      end
+    else
+      raise Exception.Create('Invalid polygon');
     // Close polygon
     if (FPoints[Part,0].X <> FPoints[Part,PointsCount(Part)-1].X)
     or (FPoints[Part,0].Y <> FPoints[Part,PointsCount(Part)-1].Y) then
     FPoints[Part] := FPoints[Part] + [FPoints[Part,0]];
-  end;
-  except
-    Beep;
   end;
 end;
 
