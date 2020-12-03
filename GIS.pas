@@ -31,6 +31,8 @@ Type
     Function Height: Float64;
     Function CenterPoint: TCoordinate;
     Function Scale(Factor: Float64): TCoordinateRect;
+    Function Contains(const Point: TCoordinate): Boolean; overload;
+    Function Contains(const [ref] Rect: TCoordinateRect): Boolean; overload;
     Function IntersectsWith(const [ref] Rect: TCoordinateRect): Boolean;
   end;
 
@@ -105,10 +107,28 @@ begin
   Result.Top := CenterY + Factor*(Top-CenterY);
 end;
 
+Function TCoordinateRect.Contains(const Point: TCoordinate): Boolean;
+begin
+  Result := (Left < Point.X) and (Right > Point.X) and
+            (Bottom < Point.Y) and (Top > Point.Y)
+end;
+
+Function TCoordinateRect.Contains(const [ref] Rect: TCoordinateRect): Boolean;
+begin
+  if not Rect.Empty then
+    Result := (Left < Rect.Left) and (Right > Rect.Right) and
+              (Bottom < Rect.Bottom) and (Top > Rect.Top)
+  else
+    Result := false;
+end;
+
 Function TCoordinateRect.IntersectsWith(const [ref] Rect: TCoordinateRect): Boolean;
 begin
-  Result := (Left < Rect.Right) and (Right > Rect.Left) and
-            (Bottom < Rect.Top) and (Top > Rect.Bottom);
+  if not Rect.Empty then
+    Result := (Left < Rect.Right) and (Right > Rect.Left) and
+              (Bottom < Rect.Top) and (Top > Rect.Bottom)
+  else
+    Result := false;
 end;
 
 end.
