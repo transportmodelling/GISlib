@@ -35,6 +35,7 @@ Type
     FPoints: TMultiPoints;
     FShapeType: TShapeType;
     FBoundingBox: TCoordinateRect;
+    FBoundingBoxes: array of TCoordinateRect;
     FData: array of TGISData;
     Function GetPoints(Part,Point: Integer): TCoordinate; inline;
   public
@@ -53,7 +54,8 @@ Type
     Function Empty: Boolean;
     Function PartsCount: Integer;
     Function PointsCount(Part: Integer): Integer;
-    Function BoundingBox: TCoordinateRect;
+    Function BoundingBox: TCoordinateRect; overload;
+    Function BoundingBox(Part: Integer): TCoordinateRect; overload;
     Function DataCount: Integer;
     Function IndexOf(const Name: string): Integer;
     Function Data(Index: Integer): TGISData;
@@ -142,19 +144,24 @@ end;
 
 Procedure TGISShape.AssignPolyLine(const Points: TMultiPoints);
 begin
-  Clear;
-  FShapeType := stLine;
-  SetLength(FPoints,Length(Points));
-  for var Part := 0 to PartsCount-1 do
+  if Length(Points) = 1 then AssignLine(Points[0]) else
   begin
-    SetLength(FPoints[Part],Length(Points[Part]));
-    if PointsCount(Part) > 1 then
+    Clear;
+    FShapeType := stLine;
+    SetLength(FPoints,Length(Points));
+    SetLength(FBoundingBoxes,PartsCount);
+    for var Part := 0 to PartsCount-1 do
+    if Length(Points[Part]) > 1 then
+    begin
+      FBoundingBoxes[Part].Clear;
+      SetLength(FPoints[Part],Length(Points[Part]));
       for var Point := 0 to PointsCount(Part)-1 do
       begin
         FPoints[Part,Point] := Points[Part,Point];
-        FBoundingBox.Enclose(Points[Part,Point]);
-      end
-    else
+        FBoundingBoxes[Part].Enclose(Points[Part,Point]);
+      end;
+      FBoundingBox.Enclose(FBoundingBoxes[Part]);
+    end else
       raise Exception.Create('Invalid poly line');
   end;
 end;
@@ -163,14 +170,15 @@ Procedure TGISShape.AssignPolygon(const Points: array of TCoordinate);
 begin
   Clear;
   FShapeType := stPolygon;
-  SetLength(FPoints,1,Length(Points));
   if Length(Points) > 2 then
+  begin
+    SetLength(FPoints,1,Length(Points));
     for var Point := 0 to Length(Points)-1 do
     begin
       FPoints[0,Point] := Points[Point];
       FBoundingBox.Enclose(Points[Point]);
     end
-  else
+  end else
     raise Exception.Create('Invalid polygon');
   // Close polygon
   if (FPoints[0,0].X <> FPoints[0,Length(Points)-1].X)
@@ -180,24 +188,29 @@ end;
 
 Procedure TGISShape.AssignPolyPolygon(const Points: TMultiPoints);
 begin
-  Clear;
-  FShapeType := stPolygon;
-  SetLength(FPoints,Length(Points));
-  for var Part := 0 to PartsCount-1 do
+  if Length(Points) = 1 then AssignPolygon(Points[0]) else
   begin
-    SetLength(FPoints[Part],Length(Points[Part]));
-    if PointsCount(Part) > 2 then
+    Clear;
+    FShapeType := stPolygon;
+    SetLength(FPoints,Length(Points));
+    SetLength(FBoundingBoxes,PartsCount);
+    for var Part := 0 to PartsCount-1 do
+    if Length(Points[Part]) > 2 then
+    begin
+      FBoundingBoxes[Part].Clear;
+      SetLength(FPoints[Part],Length(Points[Part]));
       for var Point := 0 to PointsCount(Part)-1 do
       begin
         FPoints[Part,Point] := Points[Part,Point];
-        FBoundingBox.Enclose(Points[Part,Point]);
-      end
-    else
+        FBoundingBoxes[Part].Enclose(Points[Part,Point]);
+      end;
+      FBoundingBox.Enclose(FBoundingBoxes[Part]);
+      // Close polygon
+      if (FPoints[Part,0].X <> FPoints[Part,PointsCount(Part)-1].X)
+      or (FPoints[Part,0].Y <> FPoints[Part,PointsCount(Part)-1].Y) then
+      FPoints[Part] := FPoints[Part] + [FPoints[Part,0]];
+    end else
       raise Exception.Create('Invalid polygon');
-    // Close polygon
-    if (FPoints[Part,0].X <> FPoints[Part,PointsCount(Part)-1].X)
-    or (FPoints[Part,0].Y <> FPoints[Part,PointsCount(Part)-1].Y) then
-    FPoints[Part] := FPoints[Part] + [FPoints[Part,0]];
   end;
 end;
 
@@ -242,6 +255,17 @@ Function TGISShape.BoundingBox: TCoordinateRect;
 begin
   if Empty then Clear;
   Result := FBoundingBox;
+end;
+
+Function TGISShape.BoundingBox(Part: Integer): TCoordinateRect;
+begin
+  if PartsCount > 1 then
+    Result := FBoundingBoxes[Part]
+  else
+    begin
+      if Empty then Clear;
+      Result := FBoundingBox;
+    end;
 end;
 
 Procedure TGISShape.AddData(const Data: TGISData);
