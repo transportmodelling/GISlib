@@ -109,15 +109,15 @@ end;
 
 Function TCoordinateRect.Contains(const Point: TCoordinate): Boolean;
 begin
-  Result := (Left < Point.X) and (Right > Point.X) and
-            (Bottom < Point.Y) and (Top > Point.Y)
+  Result := (Left <= Point.X) and (Right >= Point.X) and
+            (Bottom <= Point.Y) and (Top >= Point.Y)
 end;
 
 Function TCoordinateRect.Contains(const [ref] Rect: TCoordinateRect): Boolean;
 begin
   if not Rect.Empty then
-    Result := (Left < Rect.Left) and (Right > Rect.Right) and
-              (Bottom < Rect.Bottom) and (Top > Rect.Top)
+    Result := (Left <= Rect.Left) and (Right >= Rect.Right) and
+              (Bottom <= Rect.Bottom) and (Top >= Rect.Top)
   else
     Result := false;
 end;
