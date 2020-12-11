@@ -19,15 +19,6 @@ Type
 
   TMultiPoints = array {part} of array {point} of TCoordinate;
 
-  TGISData = record
-  private
-    FName,FValue: String;
-  public
-    Constructor Create(const Name,Value: String);
-    Property Name: String read FName;
-    Property Value: String read FValue;
-  end;
-
   TShapePart = record
   private
     FPoints: array of TCoordinate;
@@ -51,7 +42,6 @@ Type
     FShapeType: TShapeType;
     FParts: array of TShapePart;
     FBoundingBox: TCoordinateRect;
-    FData: array of TGISData;
     Function GetParts(Part: Integer): TShapePart; inline;
     Function GetPoints(Part,Point: Integer): TCoordinate; inline;
   public
@@ -64,15 +54,11 @@ Type
     Procedure AssignPolyLine(const Points: TMultiPoints);
     Procedure AssignPolygon(const Points: array of TCoordinate);
     Procedure AssignPolyPolygon(const Points: TMultiPoints);
-    Procedure AddData(const Data: TGISData);
     // Query methods
     Function ShapeType: TShapeType;
     Function Empty: Boolean;
     Function Count: Integer;
     Function BoundingBox: TCoordinateRect;
-    Function DataCount: Integer;
-    Function IndexOf(const Name: string): Integer;
-    Function Data(Index: Integer): TGISData;
   public
     Property Parts[Part: Integer]: TShapePart read GetParts;
     Property Points[Part,Point: Integer]: TCoordinate read GetPoints; default;
@@ -90,18 +76,6 @@ Type
 
 ////////////////////////////////////////////////////////////////////////////////
 implementation
-////////////////////////////////////////////////////////////////////////////////
-
-Constructor TGISData.Create(const Name,Value: String);
-begin
-  if Name <> '' then
-  begin
-    FName := Name;
-    FValue := Value;
-  end else
-    raise Exception.Create('Invalid GIS-data name');
-end;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 Constructor TShapePart.Create(const Points: array of TCoordinate; ClosePart: Boolean = false);
@@ -161,7 +135,6 @@ end;
 Procedure TGISShape.Clear;
 begin
   Finalize(FParts);
-  Finalize(FData);
   FBoundingBox.Clear;
 end;
 
@@ -260,28 +233,6 @@ end;
 Function TGISShape.BoundingBox: TCoordinateRect;
 begin
   if Empty then Result.Clear else  Result := FBoundingBox;
-end;
-
-Function TGISShape.DataCount: Integer;
-begin
-  Result := Length(FData);
-end;
-
-Function TGISShape.IndexOf(const Name: string): Integer;
-begin
-  Result := -1;
-  for var Index := 0 to DataCount-1 do
-  if SameText(FData[Index].FName,Name) then Exit(Index);
-end;
-
-Function TGISShape.Data(Index: Integer): TGISData;
-begin
-  Result := FData[Index];
-end;
-
-Procedure TGISShape.AddData(const Data: TGISData);
-begin
-  FData := FData + [Data];
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
