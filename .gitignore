@@ -27,7 +27,6 @@
 #
 
 # Delphi compiler-generated binaries (safe to delete)
-*.exe
 *.dll
 *.bpl
 *.bpi
@@ -51,6 +50,7 @@
 *Resource.rc
 
 # Delphi local files (user-specific info)
+*.dproj
 *.local
 *.identcache
 *.projdata
