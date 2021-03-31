@@ -308,7 +308,7 @@ begin
   try
     // Read shapes file
     var ESRIShapesFile := TShapesLayer.Create(clMaroon);
-    ESRIShapesFile.Read(FileName,TESRIShapeFile);
+    ESRIShapesFile.Read(FileName,TESRIShapeFileReader);
     // Show layer
     ShapesLayer.Free;
     ShapesLayer := ESRIShapesFile;

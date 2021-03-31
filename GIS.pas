@@ -26,6 +26,7 @@ Type
     Function Empty: Boolean;
     Procedure Clear;
     Procedure Enclose(Point: TCoordinate); overload;
+    Procedure Enclose(const Points: array of TCoordinate); overload;
     Procedure Enclose(Rect: TCoordinateRect); overload;
     Function Width: Float64;
     Function Height: Float64;
@@ -71,6 +72,11 @@ begin
   if Point.X > Right then Right := Point.X;
   if Point.Y < Bottom then Bottom := Point.Y;
   if Point.Y > Top then Top := Point.Y;
+end;
+
+Procedure TCoordinateRect.Enclose(const Points: array of TCoordinate);
+begin
+  for var Point := low(Points) to high(Points) do Enclose(Points[Point]);
 end;
 
 Procedure TCoordinateRect.Enclose(Rect: TCoordinateRect);

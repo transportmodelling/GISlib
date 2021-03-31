@@ -15,11 +15,10 @@ Uses
   Classes,SysUtils,GIS,GIS.Shapes;
 
 Type
-  TESRIShapeFile = Class(TShapesReader)
+  TESRIShapeFileReader = Class(TShapesReader)
   private
     FileStream: TBufferedFileStream;
     FileReader: TBinaryReader;
-    Function Swop(AInt: Integer): Integer;
     Function ReadPoints: TArray<TCoordinate>;
     Function ReadParts: TMultiPoints;
   public
@@ -28,23 +27,30 @@ Type
     Destructor Destroy; override;
   end;
 
+  TESRIShapeFileWriter = record
+  private
+    Class Procedure WriteFileHeader(const Writer: TBinaryWriter;
+                                    const ShapeType,FileSize: Integer;
+                                    const [ref] BoundingBox: TCoordinateRect); static;
+  public
+    Class Procedure WriteShapeFile(FileName: string; const Points: array of TCoordinate); static;
+  end;
+
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIShapeFile.Create(const FileName: string);
-begin
-  inherited Create(FileName);
-  FileStream := TBufferedFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
-  FileReader := TBinaryReader.Create(FileStream);
-  var FileCode := FileReader.ReadInt32;
-  if Swop(FileCode) = 9994 then
-    for var Skip := 1 to 24 do FileReader.ReadInt32
-  else
-    raise exception.Create('Invalid File Code in Shape file header');
-end;
+Const
+  ShapeFileCode: Integer = 9994;
+  Version: Integer = 1000;
+  // Shape types
+  NullShape = 0;
+  PointShape = 1;
+  PolyLineShape = 3;
+  PolygonShape = 5;
+  MultiPointShape = 8;
 
-Function TESRIShapeFile.Swop(AInt: Integer): Integer;
+Function Swop(AInt: Integer): Integer;
 Var
   B1,B2,B3,B4: Byte;
 begin
@@ -55,7 +61,21 @@ begin
   Result := B4+B3*256+B2*65536+B1*16777216;
 end;
 
-Function TESRIShapeFile.ReadPoints: TArray<TCoordinate>;
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TESRIShapeFileReader.Create(const FileName: string);
+begin
+  inherited Create(FileName);
+  FileStream := TBufferedFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
+  FileReader := TBinaryReader.Create(FileStream);
+  var FileCode := FileReader.ReadInt32;
+  if Swop(FileCode) = ShapeFileCode then
+    for var Skip := 1 to 24 do FileReader.ReadInt32
+  else
+    raise exception.Create('Invalid File Code in Shape file header');
+end;
+
+Function TESRIShapeFileReader.ReadPoints: TArray<TCoordinate>;
 begin
   // Skip bounding box
   for var Skip := 1 to 4 do FileReader.ReadDouble;
@@ -69,7 +89,7 @@ begin
   end;
 end;
 
-Function TESRIShapeFile.ReadParts: TMultiPoints;
+Function TESRIShapeFileReader.ReadParts: TMultiPoints;
 Var
   Count: Integer;
   FirstPointInPart: array of Integer;
@@ -100,7 +120,7 @@ begin
   end;
 end;
 
-Function TESRIShapeFile.ReadShape(out Shape: TGISShape): Boolean;
+Function TESRIShapeFileReader.ReadShape(out Shape: TGISShape): Boolean;
 begin
   if FileStream.Position < FileStream.Size then
   begin
@@ -109,15 +129,15 @@ begin
     // Read shape
     var ShapeType := FileReader.ReadInt32;
     case ShapeType of
-      0: // Null shape (proceed to next)
+      NullShape:
          Result := ReadShape(Shape);
-      1: // Point
+      PointShape:
          Shape.AssignPoint(FileReader.ReadDouble,FileReader.ReadDouble);
-      3: // Poly line
+      PolyLineShape:
          Shape.AssignPolyLine(ReadParts);
-      5: // Polygon
+      PolygonShape:
          Shape.AssignPolyPolygon(ReadParts);
-      8: // Multi point
+      MultiPointShape:
          Shape.AssignPoints(ReadPoints);
       else raise Exception.Create('Shape type not supported');
     end;
@@ -125,11 +145,74 @@ begin
     Result := false;
 end;
 
-Destructor TESRIShapeFile.Destroy;
+Destructor TESRIShapeFileReader.Destroy;
 begin
   FileStream.Free;
   FileReader.Free;
   inherited Destroy;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Class Procedure TESRIShapeFileWriter.WriteFileHeader(const Writer: TBinaryWriter;
+                                                     const ShapeType,FileSize: Integer;
+                                                     const [ref] BoundingBox: TCoordinateRect);
+Const
+  Unused: Integer = 0;
+  MZCoord: Float64 = 0.0;
+begin
+  Writer.Write(Swop(ShapeFileCode));
+  for var Cnt := 1 to 5 do Writer.Write(Unused);
+  Writer.Write(Swop(FileSize));
+  Writer.Write(Version);
+  Writer.Write(ShapeType);
+  Writer.Write(BoundingBox.Left);
+  Writer.Write(BoundingBox.Bottom);
+  Writer.Write(BoundingBox.Right);
+  Writer.Write(BoundingBox.Top);
+  for var Cnt := 1 to 4 do Writer.Write(MZCoord);
+end;
+
+Class Procedure TESRIShapeFileWriter.WriteShapeFile(FileName: string; const Points: array of TCoordinate);
+Const
+  ContentLength: Integer = 10;
+Var
+  BoundingBox: TCoordinateRect;
+  ShapesWriter,IndexWriter: TBinaryWriter;
+begin
+  ShapesWriter := nil;
+  IndexWriter := nil;
+  try
+    var NPoints := Length(Points);
+    var ShapeType: Integer := PointShape;
+    // Open files
+    FileName := ChangeFileExt(FileName,'.shp');
+    ShapesWriter := TBinaryWriter.Create(FileName,false);
+    FileName := ChangeFileExt(FileName,'.shx');
+    IndexWriter := TBinaryWriter.Create(FileName,false);
+    // Calculate bounding box
+    BoundingBox.Clear;
+    BoundingBox.Enclose(Points);
+    // Write headers
+    WriteFileHeader(ShapesWriter,ShapeType,50+14*NPoints,BoundingBox);
+    WriteFileHeader(IndexWriter,ShapeType,50+4*NPoints,BoundingBox);
+    // Write points
+    for var Point := low(Points) to high(Points) do
+    begin
+      // Write index file
+      IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
+      IndexWriter.Write(Swop(ContentLength));
+      // Write shape file
+      ShapesWriter.Write(Swop(Point+1));
+      ShapesWriter.Write(Swop(ContentLength));
+      ShapesWriter.Write(ShapeType);
+      ShapesWriter.Write(Points[Point].X);
+      ShapesWriter.Write(Points[Point].Y);
+    end;
+  finally
+    ShapesWriter.Free;
+    IndexWriter.Free;
+  end;
 end;
 
 end.
