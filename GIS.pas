@@ -17,6 +17,8 @@ Uses
 Type
   TCoordinate = record
     X,Y: Float64;
+    Class Function SqrDistance(const [ref] A,B: TCoordinate): Float64; static;
+    Class Function Distance(const [ref] A,B: TCoordinate): Float64; static;
     Constructor Create(Xcoord,Ycoord: Float64);
   end;
 
@@ -44,6 +46,16 @@ Type
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
+
+Class Function TCoordinate.SqrDistance(const [ref] A,B: TCoordinate): Float64;
+begin
+  Result := sqr(A.X-B.X) + sqr(A.Y-B.Y);
+end;
+
+Class Function TCoordinate.Distance(const [ref] A,B: TCoordinate): Float64;
+begin
+  Result := sqrt( sqr(A.X-B.X) + sqr(A.Y-B.Y) );
+end;
 
 Constructor TCoordinate.Create(Xcoord,Ycoord: Float64);
 begin

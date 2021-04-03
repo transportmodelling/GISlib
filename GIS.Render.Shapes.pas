@@ -136,7 +136,7 @@ begin
             if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
             and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
             begin
-              var LabelCoord := TPolyLabel.PolyLabel(PolyPolygon);
+              var LabelCoord := TPolyLabel.PolyLabel(PolyPolygon,100);
               var LabelPixel := PixelConverter.CoordToPixel(LabelCoord);
               var X := LabelPixel.X - (LabelSize.cx div 2);
               var Y := LabelPixel.Y - (LabelSize.cy div 2);
