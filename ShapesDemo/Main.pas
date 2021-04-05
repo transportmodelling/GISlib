@@ -15,7 +15,7 @@ uses
   System.Classes, System.SysUtils, System.Variants, System.Actions, Winapi.Windows,
   Winapi.Messages, Winapi.ShellAPI, Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ActnList,Vcl.StdActns,
   System.ImageList, Vcl.ImgList, Vcl.PlatformDefaultStyleActnCtrls, Vcl.ActnMan, Vcl.ToolWin, Vcl.ActnCtrls,
-  Vcl.ExtCtrls, GIS, GIS.Shapes.ESRI, GIS.Render.Shapes, GIS.REnder.Shapes.PixelConv;
+  Vcl.ExtCtrls, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Render.Shapes, GIS.Render.Shapes.PixelConv;
 
 type
   TZoomStyle = (zsNone,zsMove,zsZoomIn,zsZoomOut);
@@ -58,6 +58,7 @@ type
     Var
       ZoomStyle: TZoomStyle;
       ShapesImage: TBitmap;
+      Margin: Integer;
       MousePosition,StartPosition: TPoint;
       MouseCoordinate: TCoordinate;
       MouseDown: Boolean;
@@ -229,7 +230,7 @@ begin
               Viewport.Clear;
               Viewport.Enclose(PixelConverter.PixelToCoord(StartPosition));
               Viewport.Enclose(PixelConverter.PixelToCoord(MousePosition));
-              PixelConverter.Initialize(Viewport,ShapesImage.Width,ShapesImage.Height);
+              PixelConverter.Initialize(Viewport,ShapesImage.Width,ShapesImage.Height,Margin);
             end;
           ShapesImageStatus := isViewportChanged;
           PaintBox.Invalidate;
@@ -260,7 +261,7 @@ begin
     // Initialize viewport
     if ShapesImageStatus = isViewportUnInitialized then
     begin
-      PixelConverter.Initialize(ShapesLayer.BoundingBox,PaintBox.ClientWidth,PaintBox.ClientHeight);
+      PixelConverter.Initialize(ShapesLayer.BoundingBox,PaintBox.ClientWidth,PaintBox.ClientHeight,Margin);
       ShapesImageStatus := isViewportChanged;
     end;
     // Repaint image
@@ -309,6 +310,7 @@ begin
     // Read shapes file
     var ESRIShapesFile := TShapesLayer.Create(clMaroon);
     ESRIShapesFile.Read(FileName,TESRIShapeFileReader);
+    if ESRIShapesFile.ShapeCount(stPoint) = 0 then Margin := 0 else Margin := ESRIShapesFile.PointRenderSize;
     // Show layer
     ShapesLayer.Free;
     ShapesLayer := ESRIShapesFile;

@@ -16,8 +16,12 @@ Uses
   GIS.Shapes.Polygon,GIS.Shapes.Polygon.PolyLabel, GIS.Render.Shapes.PixelConv;
 
 Type
+  TPointRenderStyle = (rsCircle,rsSquare,rsTriangleDown,rsTriangleUp);
+
   TCustomShapesLayer = Class
   private
+    FPointRenderSize: Integer;
+    FPointRenderStyle: TPointRenderStyle;
     Viewport: TCoordinateRect;
     PolygonBitmap: TBitmap;
   strict protected
@@ -46,6 +50,7 @@ Type
   TShapesLayer = Class(TCustomShapesLayer)
   private
     FShapes: array of TGISShape;
+    FShapeCount: array[TShapeType] of Integer;
     Procedure EnsureCapacity;
     Function GetShapes(Shape: Integer): TGISShape; inline;
   strict protected
@@ -59,10 +64,13 @@ Type
     Constructor Create(const TransparentColor: TColor; InitialCapacity: Integer = 256);
     Procedure Clear;
     Procedure Add(Shape: TGISShape);
+    Function ShapeCount(ShapeType: TShapeType): Integer;
     Procedure Read(const FileName: String; const FileFormat: TShapesFormat);
   public
     Property Count: Integer read FCount;
     Property Shapes[Shape: Integer]: TGISShape read GetShapes; default;
+    Property PointRenderSize: Integer read FPointRenderSize write FPointRenderSize;
+    Property PointRenderStyle: TPointRenderStyle read FPointRenderStyle write FPointRenderStyle;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -74,6 +82,8 @@ Constructor TCustomShapesLayer.Create(const TransparentColor: TColor);
 begin
   inherited Create;
   FBoundingBox.Clear;
+  FPointRenderStyle := rsCircle;
+  FPointRenderSize := 6;
   PolygonBitmap := TBitmap.Create;
   PolygonBitmap.Transparent := true;
   PolygonBitmap.TransparentColor := TransparentColor;
@@ -94,6 +104,22 @@ begin
   case Shape.ShapeType of
     stPoint:
       begin
+        var PointsCount := Shape.Parts[0].Count;
+        var Radius := FPointRenderSize div 2;
+        for var Point := 0 to PointsCount-1 do
+        begin
+          var Pixel := PixelConverter.CoordToPixel(Shape[0,Point]);
+          case FPointRenderStyle of
+            rsCircle: Canvas.Ellipse(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius);
+            rsSquare: Canvas.Rectangle(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius);
+            rsTriangleUp: Canvas.Polygon([Types.Point(Pixel.X-Radius,Pixel.Y+Radius),
+                                          Types.Point(Pixel.X+Radius,Pixel.Y+Radius),
+                                          Types.Point(Pixel.X,Pixel.Y-Radius)]);
+            rsTriangleDown: Canvas.Polygon([Types.Point(Pixel.X-Radius,Pixel.Y-Radius),
+                                            Types.Point(Pixel.X+Radius,Pixel.Y-Radius),
+                                            Types.Point(Pixel.X,Pixel.Y+Radius)]);
+          end;
+        end;
       end;
     stLine:
       begin
@@ -232,6 +258,7 @@ end;
 Procedure TShapesLayer.Clear;
 begin
   FCount := 0;
+  for var ShapeType := low(TShapeType) to high(TShapeType) do FShapeCount[ShapeType] := 0;
   FBoundingBox.Clear;
 end;
 
@@ -240,7 +267,13 @@ begin
   EnsureCapacity;
   FShapes[FCount] := Shape;
   Inc(FCount);
+  Inc(FShapeCount[Shape.ShapeType]);
   FBoundingBox.Enclose(Shape.BoundingBox);
+end;
+
+Function TShapesLayer.ShapeCount(ShapeType: TShapeType): Integer;
+begin
+  Result := FShapeCount[ShapeType];
 end;
 
 Procedure TShapesLayer.Read(const FileName: String; const FileFormat: TShapesFormat);
