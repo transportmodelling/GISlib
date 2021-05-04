@@ -32,6 +32,7 @@ Type
     Procedure Enclose(Rect: TCoordinateRect); overload;
     Function Width: Float64;
     Function Height: Float64;
+    Function Area: Float64;
     Function CenterPoint: TCoordinate;
     Function Scale(Factor: Float64): TCoordinateRect;
     Function Contains(const Point: TCoordinate): Boolean; overload;
@@ -107,6 +108,11 @@ end;
 Function TCoordinateRect.Height: Float64;
 begin
   Result := Top-Bottom;
+end;
+
+Function TCoordinateRect.Area: Float64;
+begin
+  Result := Width*Height;
 end;
 
 Function TCoordinateRect.CenterPoint: TCoordinate;

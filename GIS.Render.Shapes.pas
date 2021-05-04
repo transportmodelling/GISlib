@@ -24,11 +24,11 @@ Type
     FPointRenderStyle: TPointRenderStyle;
     FPointBitmap: TBitmap;
     Viewport: TCoordinateRect;
-    PolygonBitmap: TBitmap;
+    PolygonBitmap,PolygonBackgroundBitmap: TBitmap;
     Procedure InitPointRenderStyle;
     Procedure SetPointRenderStyle(PointRenderStyle: TPointRenderStyle);
     Procedure SetPointBitmap(PointBitmap: TBitmap);
-    Procedure PointBitmapChange(sender: TObject);
+    Procedure PointBitmapChange(Sender: TObject);
   strict protected
     FCount: Integer;
     FBoundingBox: TCoordinateRect;
@@ -93,6 +93,9 @@ begin
   PolygonBitmap := TBitmap.Create;
   PolygonBitmap.Transparent := true;
   PolygonBitmap.TransparentColor := TransparentColor;
+  PolygonBackgroundBitmap := TBitmap.Create;
+  PolygonBackgroundBitmap.Canvas.Brush.Style := bsSolid;
+  PolygonBackgroundBitmap.Canvas.Brush.Color := TransparentColor;
   InitPointRenderStyle;
 end;
 
@@ -172,9 +175,7 @@ begin
     stPolygon:
       begin
         // Clear polygon bitmap
-        PolygonBitmap.Canvas.Brush.Style := bsSolid;
-        PolygonBitmap.Canvas.Brush.Color := PolygonBitmap.TransparentColor;
-        PolygonBitmap.Canvas.FillRect(Rect(0,0,PolygonBitmap.Width,PolygonBitmap.Height));
+        PolygonBitmap.Canvas.Draw(0,0,PolygonBackgroundBitmap);
         // Draw poly polygons on polygon bitmap
         var PolyPolygons := TPolyPolygons.Create(Shape);
         for var Outer := 0 to PolyPolygons.Count-1 do
@@ -230,6 +231,8 @@ begin
   Viewport := PixelConverter.PixelToCoord(Width,Height);
   PolygonBitmap.SetSize(Width,Height);
   PolygonBitmap.Canvas.Pen := Canvas.Pen;
+  PolygonBackgroundBitmap.SetSize(Width,Height);
+  PolygonBackgroundBitmap.Canvas.FillRect(Rect(0,0,Width,Height));
   for var Shape := 0 to FCount-1 do DrawShape(Shape,Canvas,PixelConverter);
 end;
 
@@ -242,6 +245,7 @@ Destructor TCustomShapesLayer.Destroy;
 begin
   FPointBitmap.Free;
   PolygonBitmap.Free;
+  PolygonBackgroundBitmap.Free;
   inherited Destroy;
 end;
 

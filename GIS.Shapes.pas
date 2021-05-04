@@ -36,8 +36,8 @@ Type
 
   TGISShape = record
   // Polygons must be non-intersecting (they may touch at vertices but not along segments)
-  // Clockwise oriented polygons are outer rings
-  // Counterclockwise oriented polygons are holes
+  // Polygons with an even number of enclosing rings are outer rings
+  // Polygons with an odd number of enclosing rings are holes
   private
     FShapeType: TShapeType;
     FParts: array of TShapePart;

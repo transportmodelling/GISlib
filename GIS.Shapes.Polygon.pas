@@ -19,13 +19,14 @@ Type
 
   TPolyPolygon = record
   private
+    Class Function RingArea(const Points: array of TCoordinate): Float64; static;
+    Class Function LineSegmentsIntersect(const A,B,P,Q: TCoordinate): Boolean; static;
+    Class Function NrIntersections(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Integer; static;
+    Class Function PointInRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Boolean; static;
+  private
     FOuterRing: TShapePart;
     FHoles: array of TShapePart;
     Function GetHoles(Hole: Integer): TShapePart; inline;
-    Function RingArea(const Points: array of TCoordinate): Float64;
-    Function LineSegmentsIntersect(const A,B,P,Q: TCoordinate): Boolean;
-    Function NrIntersections(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Integer;
-    Function PointInRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Boolean;
     Function DistanceToLineSegment(const [ref] Point,A,B: TCoordinate): Float64;
     Function DistanceToRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Float64;
   public
@@ -57,7 +58,7 @@ begin
   Result := FHoles[Hole];
 end;
 
-Function TPolyPolygon.RingArea(const Points: array of TCoordinate): Float64;
+Class Function TPolyPolygon.RingArea(const Points: array of TCoordinate): Float64;
 var
   BoundingBox: TCoordinateRect;
 begin
@@ -74,7 +75,7 @@ begin
                    - (Points[Point+1].X-X0)*(Points[Point].Y-Y0);
 end;
 
-Function TPolyPolygon.LineSegmentsIntersect(const A,B,P,Q: TCoordinate): Boolean;
+Class Function TPolyPolygon.LineSegmentsIntersect(const A,B,P,Q: TCoordinate): Boolean;
 // Tests whether line segments AB and PQ intersect
 // (does not handle the case where AB and PQ are collinear)
 begin
@@ -87,8 +88,8 @@ begin
     Result := false;
 end;
 
-Function TPolyPolygon.NrIntersections(const [ref] Point: TCoordinate;
-                                      const [ref] Ring: TShapePart): Integer;
+Class Function TPolyPolygon.NrIntersections(const [ref] Point: TCoordinate;
+                                            const [ref] Ring: TShapePart): Integer;
 // Returns the number of intersection between Ring
 // and the line from Point to Point(infinity,Point.Y).
 Const
@@ -134,7 +135,7 @@ begin
   end;
 end;
 
-Function TPolyPolygon.PointInRing(const [ref] Point: TCoordinate;
+Class Function TPolyPolygon.PointInRing(const [ref] Point: TCoordinate;
                                   const [ref] Ring: TShapePart): Boolean;
 begin
   Result := ((NrIntersections(Point,Ring) mod 2) = 1);
@@ -215,76 +216,80 @@ end;
 
 Constructor TPolyPolygons.Create(const [ref] PolyPolygons: TGISShape);
 Var
-  PolygonAreas: array of Float64;
-  PolygonIndices: array of Integer;
-  PotentialHoles: array of Boolean;
+  BoundingBoxAreas: array of Float64;
+  PolygonIndices,EnclosingPolygonsCount,LastEnclosingPolygon: array of Integer;
 begin
   if PolyPolygons.ShapeType = stPolygon then
-  begin
-    // Initialization
-    var OuterCount := 0;
-    SetLength(PolygonAreas,PolyPolygons.Count);
-    SetLength(PolygonIndices,PolyPolygons.Count);
-    SetLength(PotentialHoles,PolyPolygons.Count);
-    for var Polygon := 0 to PolyPolygons.Count-1 do PolygonIndices[Polygon] := Polygon;
-    // Calculate (2x) polygon areas
-    for var Part := 0 to PolyPolygons.Count-1 do
+    if PolyPolygons.Count > 1 then
     begin
-      var Polygon := PolyPolygons.Parts[Part];
-      for var Point := 0 to Polygon.Count-2 do
-      PolygonAreas[Part] := PolygonAreas[Part] +
-                            Polygon[Point].X*Polygon[Point+1].Y -
-                            Polygon[Point+1].X*Polygon[Point].Y;
-    end;
-    // Sort polygons (Outer before inner, so large area before small area)
-    TArray.Sort<Integer>(PolygonIndices,TComparer<Integer>.Construct(
-       Function(const Left,Right: Integer): Integer
-       begin
-         var LeftArea := Abs(PolygonAreas[Left]);
-         var RightArea := Abs(PolygonAreas[Right]);
-         if LeftArea > RightArea then Result := -1 else
-         if LeftArea < RightArea then Result := +1 else
-         Result := 0;
-       end ),0,PolyPolygons.Count);
-    // Select outer ring
-    SetLength(FPolyPolygons,PolyPolygons.Count);
-    for var Polygon := 0 to PolyPolygons.Count-1 do
-    begin
-      var PolygonIndex := PolygonIndices[Polygon];
-      if PolygonAreas[PolygonIndex] < 0 then
+      // Calculate bounding box areas
+      SetLength(BoundingBoxAreas,PolyPolygons.Count);
+      for var Polygon := 0 to PolyPolygons.Count-1 do
+      BoundingBoxAreas[Polygon] := PolyPolygons.Parts[Polygon].BoundingBox.Area;
+      // Sort polygons (large bounding box area before small bounding box area)
+      SetLength(PolygonIndices,PolyPolygons.Count);
+      for var Polygon := 0 to PolyPolygons.Count-1 do PolygonIndices[Polygon] := Polygon;
+      TArray.Sort<Integer>(PolygonIndices,TComparer<Integer>.Construct(
+         Function(const Left,Right: Integer): Integer
+         begin
+           var LeftArea := Abs(BoundingBoxAreas[Left]);
+           var RightArea := Abs(BoundingBoxAreas[Right]);
+           if LeftArea > RightArea then Result := -1 else
+           if LeftArea < RightArea then Result := +1 else
+           Result := 0;
+         end ),0,PolyPolygons.Count);
+      // Count number of enclosing polygons
+      SetLength(EnclosingPolygonsCount,PolyPolygons.Count);
+      SetLength(LastEnclosingPolygon,PolyPolygons.Count);
+      LastEnclosingPolygon[0] := -1;
+      for var Polygon := 1 to PolyPolygons.Count-1 do
       begin
-        var OuterRing := PolyPolygons.Parts[PolygonIndex];
-        FPolyPolygons[OuterCount].FOuterRing := OuterRing;
-        for var PotentialHole := Polygon+1 to PolyPolygons.Count-1 do PotentialHoles[PotentialHole] := true;
-        // Select holes of outer ring
-        for var PotentialHole := Polygon+1 to PolyPolygons.Count-1 do
-        if  PotentialHoles[PotentialHole] then
+        var PolygonIndex := PolygonIndices[Polygon];
+        var PolygonBoundingBox := PolyPolygons.Parts[PolygonIndex].BoundingBox;
+        // Find last enclosing polygon
+        LastEnclosingPolygon[Polygon] := -1;
+        for var PotentialEnclosingPolygon := Polygon-1 downto 0 do
         begin
-          var PotentialHoleIndex := PolygonIndices[PotentialHole];
-          if PolygonAreas[PotentialHoleIndex] > 0 then
+          var EnclosingPolygonIndex := PolygonIndices[PotentialEnclosingPolygon];
+          var EnclosingPolygonBoundingBox := PolyPolygons.Parts[EnclosingPolygonIndex].BoundingBox;
+          if EnclosingPolygonBoundingBox.Contains(PolygonBoundingBox) then
           begin
-            var Hole := PolyPolygons.Parts[PotentialHoleIndex];
-            if OuterRing.BoundingBox.Contains(Hole.BoundingBox) then
+            var TestPoint := PolyPolygons.Parts[PolygonIndex].Points[0];
+            if TPolyPolygon.PointInRing(TestPoint,PolyPolygons.Parts[EnclosingPolygonIndex]) then
             begin
-              // Add hole
-              FPolyPolygons[OuterCount].FHoles := FPolyPolygons[OuterCount].FHoles + [Hole];
-              // Exclude anything inside hole as potential hole
-              for var HoleInterior := PotentialHole+1 to PolyPolygons.Count-1 do
-              if  PotentialHoles[HoleInterior] then
-              begin
-                var HoleInteriorIndex := PolygonIndices[HoleInterior];
-                var Interior := PolyPolygons.Parts[HoleInteriorIndex];
-                if Hole.BoundingBox.Contains(Interior.BoundingBox) then
-                PotentialHoles[HoleInterior] := false;
-              end;
+              EnclosingPolygonsCount[Polygon] := EnclosingPolygonsCount[PotentialEnclosingPolygon]+1;
+              LastEnclosingPolygon[Polygon] := PotentialEnclosingPolygon;
+              Break;
             end;
           end;
         end;
+      end;
+      // Select outer rings
+      var OuterCount := 0;
+      SetLength(FPolyPolygons,PolyPolygons.Count);
+      for var Polygon := 0 to PolyPolygons.Count-1 do
+      if EnclosingPolygonsCount[Polygon] mod 2 = 0 then
+      begin
+        var PolygonIndex := PolygonIndices[Polygon];
+        var OuterRing := PolyPolygons.Parts[PolygonIndex];
+        FPolyPolygons[OuterCount].FOuterRing := OuterRing;
+        // Select holes
+        for var PotentialHole := Polygon+1 to PolyPolygons.Count-1 do
+        if LastEnclosingPolygon[PotentialHole] = Polygon then
+        begin
+          var HoleIndex := PolygonIndices[PotentialHole];
+          var Hole := PolyPolygons.Parts[HoleIndex];
+          FPolyPolygons[OuterCount].FHoles := FPolyPolygons[OuterCount].FHoles + [Hole];
+        end;
         Inc(OuterCount);
       end;
-    end;
-    SetLength(FPolyPolygons,OuterCount);
-  end else
+      SetLength(FPolyPolygons,OuterCount);
+    end else
+    begin
+      SetLength(FPolyPolygons,1);
+      FPolyPolygons[0].FOuterRing := PolyPolygons.Parts[0];
+    end
+  else
     raise Exception.Create('Invalid shape type');
 end;
 
