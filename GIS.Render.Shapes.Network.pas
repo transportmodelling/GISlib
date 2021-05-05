@@ -30,20 +30,18 @@ Type
     FNodesCount: Integer;
     FNodes: array of TCoordinate;
     FLinks: array of TNetworkLink;
-    LinkShape: TGISShape;
+    LinkRenderer: TCustomShapesLayer.TLinesRenderer;
     Procedure EnsureNodesCapacity;
     Procedure EnsureLinksCapacity;
     Function GetNodes(Node: Integer): TCoordinate; inline;
     Function GetLinks(Link: Integer): TNetworkLink; inline;
   strict protected
-    Procedure DrawShape(const Shape: Integer;
-                        const Canvas: TCanvas;
-                        const PixelConverter: TCustomPixelConverter);  override;
+    Function ShapeRenderer(const Shape: Integer): TCustomShapesLayer.TShapeRenderer; override;
+    Procedure SetPaintStyle(const Link: Integer; const Canvas: TCanvas); override;
   strict protected
     Procedure SetNodesCapacity(Capacity: Integer); virtual;
     Procedure SetLinksCapacity(Capacity: Integer); virtual;
     Function LinkLabel(const Link: Integer): String; virtual;
-    Procedure SetPaintStyle(const Link: Integer; const Canvas: TCanvas); virtual;
   public
     Constructor Create(const TransparentColor: TColor;
                        const InitialNodesCapacity: Integer = 16384;
@@ -52,6 +50,7 @@ Type
     Function AddNode(Node: TCoordinate): Integer; overload;
     Procedure AddLink(FromNode,ToNode: Integer); overload;
     Procedure AddLink(Link: TNetworkLink); overload;
+    Destructor Destroy; override;
   public
     Property NodesCount: Integer read FNodesCount;
     Property LinksCount: Integer read FCount;
@@ -79,6 +78,7 @@ begin
   inherited Create(TransparentColor);
   SetNodesCapacity(InitialNodesCapacity);
   SetLinksCapacity(InitialLinksCapacity);
+  LinkRenderer := TCustomShapesLayer.TLinesRenderer.Create;
 end;
 
 Procedure TNetworkLayer.EnsureNodesCapacity;
@@ -111,17 +111,10 @@ begin
   Result := FLinks[Link];
 end;
 
-Procedure TNetworkLayer.DrawShape(const Shape: Integer;
-                                  const Canvas: TCanvas;
-                                  const PixelConverter: TCustomPixelConverter);
+Function TNetworkLayer.ShapeRenderer(const Shape: Integer): TCustomShapesLayer.TShapeRenderer;
 begin
-  LinkShape.AssignLine([FNodes[FLinks[Shape].FFromNode],FNodes[FLinks[Shape].FToNode]]);
-  if DrawShape(LinkShape.BoundingBox) then
-  begin
-    var ShpLbl := LinkLabel(Shape);
-    SetPaintStyle(Shape,Canvas);
-    DrawShape(LinkShape,ShpLbl,Canvas,PixelConverter);
-  end;
+  LinkRenderer.Lines.AssignLine([FNodes[FLinks[Shape].FFromNode],FNodes[FLinks[Shape].FToNode]]);
+  Result := LinkRenderer;
 end;
 
 Procedure TNetworkLayer.SetNodesCapacity(Capacity: Integer);
@@ -166,6 +159,12 @@ begin
   EnsureLinksCapacity;
   FLinks[FCount] := Link;
   Inc(FCount);
+end;
+
+Destructor TNetworkLayer.Destroy;
+begin
+  LinkRenderer.Free;
+  inherited Destroy;
 end;
 
 end.

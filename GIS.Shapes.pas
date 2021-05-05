@@ -49,11 +49,13 @@ Type
     Procedure Clear;
     Procedure AssignPoint(const X,Y: Float64); overload;
     Procedure AssignPoint(const Point: TCoordinate); overload;
-    Procedure AssignPoints(const Points: array of TCoordinate);
+    Procedure AssignPoints(const Points: array of TCoordinate); overload;
+    Procedure AssignPoints(const Points: TShapePart); overload;
     Procedure AssignLine(const Points: array of TCoordinate);
     Procedure AssignPolyLine(const Points: TMultiPoints);
     Procedure AssignPolygon(const Points: array of TCoordinate);
-    Procedure AssignPolyPolygon(const Points: TMultiPoints);
+    Procedure AssignPolyPolygon(const Points: TMultiPoints); overload;
+    Procedure AssignPolyPolygon(const Points: array of TShapePart); overload;
     // Query methods
     Function ShapeType: TShapeType;
     Function Empty: Boolean;
@@ -161,6 +163,14 @@ begin
   FBoundingBox.Enclose(FParts[0].FBoundingBox);
 end;
 
+Procedure TGISShape.AssignPoints(const Points: TShapePart);
+begin
+  Clear;
+  FShapeType := stPoint;
+  SetLength(FParts,1);
+  FParts[0] := Points;
+end;
+
 Procedure TGISShape.AssignLine(const Points: array of TCoordinate);
 begin
   Clear;
@@ -210,6 +220,20 @@ begin
   if Length(Points[Part]) > 2 then
   begin
     FParts[Part] := TShapePart.Create(Points[Part],true);
+    FBoundingBox.Enclose(FParts[Part].FBoundingBox);
+  end else
+    raise Exception.Create('Invalid polygon');
+end;
+
+Procedure TGISShape.AssignPolyPolygon(const Points: array of TShapePart);
+begin
+  Clear;
+  FShapeType := stPolygon;
+  SetLength(FParts,Length(Points));
+  for var Part := 0 to Count-1 do
+  if Points[Part].Count > 2 then
+  begin
+    FParts[Part] := Parts[Part];
     FBoundingBox.Enclose(FParts[Part].FBoundingBox);
   end else
     raise Exception.Create('Invalid polygon');
