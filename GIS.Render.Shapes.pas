@@ -23,7 +23,7 @@ Type
     FPointRenderSize: Integer;
     FPointRenderStyle: TPointRenderStyle;
     FPointBitmap: TBitmap;
-    PolygonBitmap,PolygonBackgroundBitmap: TBitmap;
+    PolygonBitmap: TBitmap;
     Viewport: TCoordinateRect;
     Function GetBoundingBoxes(Shape: Integer): TCoordinateRect;
     Procedure InitPointRenderStyle;
@@ -74,9 +74,14 @@ Type
         Layer: TCustomShapesLayer;
         Function Shape: TGISShape; override;
         Function BoundingBox: TCoordinateRect; override;
+        Procedure Draw(const Outer: Integer;
+                       const ShapeLabel: String;
+                       const Canvas: TCanvas;
+                       const HolesColor: TColor;
+                       const PixelConverter: TCustomPixelConverter); overload;
         Procedure Draw(const ShapeLabel: String;
                        const Canvas: TCanvas;
-                       const PixelConverter: TCustomPixelConverter); override;
+                       const PixelConverter: TCustomPixelConverter); overload; override;
       end;
     Const
       MaxPolyLabelIter = 100;
@@ -91,6 +96,10 @@ Type
     Procedure DrawLayer(const Canvas: TCanvas;
                         const PixelConverter: TCustomPixelConverter;
                         const Width,Height: Integer); overload;
+    {Procedure DrawLayer(const Canvas: TCanvas;
+                        const Backcolor: TColor;
+                        const PixelConverter: TCustomPixelConverter;
+                        const Width,Height: Integer); overload;}
     Procedure DrawLayer(const Bitmap: TBitmap; const PixelConverter: TCustomPixelConverter); overload;
     Destructor Destroy; override;
   public
@@ -212,67 +221,87 @@ begin
    Result := ShapeBoundingBox;
 end;
 
-Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const ShapeLabel: String;
+Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const Outer: Integer;
+                                                        const ShapeLabel: String;
                                                         const Canvas: TCanvas;
+                                                        const HolesColor: TColor;
                                                         const PixelConverter: TCustomPixelConverter);
 Var
   LabelCoord: TCoordinate;
   Pixels: array of TPoint;
 begin
-  var PolygonBitmap := Layer.PolygonBitmap;
-  var PolygonBackgroundBitmap := Layer.PolygonBackgroundBitmap;
-  // Clear polygon bitmap
-  PolygonBitmap.Canvas.Draw(0,0,PolygonBackgroundBitmap);
-  // Draw poly polygons on polygon bitmap
-  for var Outer := 0 to PolyPolygons.Count-1 do
+  var OuterStyle := Canvas.Brush.Style;
+  var OuterColor := Canvas.Brush.Color;
+  var PolyPolygon := PolyPolygons[Outer];
+  // Calculate pixels outer ring
+  var OuterRing := PolyPolygon.OuterRing;
+  SetLength(Pixels,OuterRing.Count);
+  for var Point := 0 to OuterRing.Count-1 do
+  Pixels[Point] := PixelConverter.CoordToPixel(OuterRing[Point]);
+  // Draw outer ring
+  var PixelBoundingBox := TRect.Union(Pixels);
+  if (PixelBoundingBox.Width > 0) and (PixelBoundingBox.Height > 0) then
   begin
-    var PolyPolygon := PolyPolygons[Outer];
-    // Calculate pixels outer ring
-    var OuterRing := PolyPolygon.OuterRing;
-    SetLength(Pixels,OuterRing.Count);
-    for var Point := 0 to OuterRing.Count-1 do
-    Pixels[Point] := PixelConverter.CoordToPixel(OuterRing[Point]);
-    // Draw outer ring
-    var PixelBoundingBox := TRect.Union(Pixels);
-    if (PixelBoundingBox.Width > 0) and (PixelBoundingBox.Height > 0) then
+    Canvas.Brush.Style := OuterStyle;
+    Canvas.Brush.Color := OuterColor;
+    Canvas.Polygon(Pixels);
+    // Draw label
+    var LabelSize := Canvas.TextExtent(ShapeLabel);
+    if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
+    and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
     begin
-      PolygonBitmap.Canvas.Brush := Canvas.Brush;
-      PolygonBitmap.Canvas.Polygon(Pixels);
-      // Draw label
-      var LabelSize := PolygonBitmap.Canvas.TextExtent(ShapeLabel);
-      if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
-      and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
-      begin
-        if LabelCoords[Outer].Calculated then
-          LabelCoord := LabelCoords[Outer].Coordinate
-        else
-          begin
-            LabelCoord := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
-            LabelCoords[Outer].Calculated := true;
-            LabelCoords[Outer].Coordinate := LabelCoord;
-          end;
-        var LabelPixel := PixelConverter.CoordToPixel(LabelCoord);
-        var X := LabelPixel.X - (LabelSize.cx div 2);
-        var Y := LabelPixel.Y - (LabelSize.cy div 2);
-        PolygonBitmap.Canvas.TextOut(X,Y,ShapeLabel);
-      end;
-      // Draw holes
-      for var Inner := 0 to PolyPolygon.HolesCount-1 do
-      begin
-        // Calculate pixels hole
-        var Hole := PolyPolygon.Holes[Inner];
-        SetLength(Pixels,Hole.Count);
-        for var Point := 0 to Hole.Count-1 do
-        Pixels[Point] := PixelConverter.CoordToPixel(Hole[Point]);
-        // Draw hole
-        PolygonBitmap.Canvas.Brush.Style := bsSolid;
-        PolygonBitmap.Canvas.Brush.Color := PolygonBitmap.TransparentColor;
-        PolygonBitmap.Canvas.Polygon(Pixels);
-      end;
+      if LabelCoords[Outer].Calculated then
+        LabelCoord := LabelCoords[Outer].Coordinate
+      else
+        begin
+          LabelCoord := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
+          LabelCoords[Outer].Calculated := true;
+          LabelCoords[Outer].Coordinate := LabelCoord;
+        end;
+      var LabelPixel := PixelConverter.CoordToPixel(LabelCoord);
+      var X := LabelPixel.X - (LabelSize.cx div 2);
+      var Y := LabelPixel.Y - (LabelSize.cy div 2);
+      Canvas.TextOut(X,Y,ShapeLabel);
+    end;
+    // Draw holes
+    for var Inner := 0 to PolyPolygon.HolesCount-1 do
+    begin
+      // Calculate pixels hole
+      var Hole := PolyPolygon.Holes[Inner];
+      SetLength(Pixels,Hole.Count);
+      for var Point := 0 to Hole.Count-1 do
+      Pixels[Point] := PixelConverter.CoordToPixel(Hole[Point]);
+      // Draw hole
+      Canvas.Brush.Style := bsSolid;
+      Canvas.Brush.Color := HolesColor;
+      Canvas.Polygon(Pixels);
     end;
   end;
-  // Draw polygon bitmap
-  Canvas.Draw(0,0,PolygonBitmap);
+  Canvas.Brush.Style := OuterStyle;
+  Canvas.Brush.Color := OuterColor;
+end;
+
+Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const ShapeLabel: String;
+                                                        const Canvas: TCanvas;
+                                                        const PixelConverter: TCustomPixelConverter);
+begin
+  for var Outer := 0 to Polypolygons.Count-1 do
+  if PolyPolygons[Outer].HolesCount = 0 then
+    Draw(Outer,ShapeLabel,Canvas,0,PixelConverter)
+  else
+    begin
+      var PolygonBitmap := Layer.PolygonBitmap;
+      // Clear polygon bitmap
+      PolygonBitmap.Canvas.Brush.Style := bsSolid;
+      PolygonBitmap.Canvas.Brush.Color := PolygonBitmap.TransparentColor;
+      PolygonBitmap.Canvas.FillRect(Rect(0,0,PolygonBitmap.Width,PolygonBitmap.Height));
+      // Draw poly polygon on polygon bitmap
+      PolygonBitmap.Canvas.Brush.Style := Canvas.Brush.Style;
+      PolygonBitmap.Canvas.Brush.Color := Canvas.Brush.Color;
+      Draw(Outer,ShapeLabel,PolygonBitmap.Canvas,PolygonBitmap.TransparentColor,PixelConverter);
+      // Draw polygon bitmap on canvas
+      Canvas.Draw(0,0,PolygonBitmap);
+    end;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -287,9 +316,6 @@ begin
   PolygonBitmap := TBitmap.Create;
   PolygonBitmap.Transparent := true;
   PolygonBitmap.TransparentColor := TransparentColor;
-  PolygonBackgroundBitmap := TBitmap.Create;
-  PolygonBackgroundBitmap.Canvas.Brush.Style := bsSolid;
-  PolygonBackgroundBitmap.Canvas.Brush.Color := TransparentColor;
   InitPointRenderStyle;
 end;
 
@@ -335,8 +361,7 @@ begin
   Viewport := PixelConverter.PixelToCoord(Width,Height);
   PolygonBitmap.SetSize(Width,Height);
   PolygonBitmap.Canvas.Pen := Canvas.Pen;
-  PolygonBackgroundBitmap.SetSize(Width,Height);
-  PolygonBackgroundBitmap.Canvas.FillRect(Rect(0,0,Width,Height));
+  PolygonBitmap.Canvas.Brush := Canvas.Brush;
   for var Shape := 0 to FCount-1 do
   begin
     var ShpRenderer := ShapeRenderer(Shape);
@@ -358,7 +383,6 @@ Destructor TCustomShapesLayer.Destroy;
 begin
   FPointBitmap.Free;
   PolygonBitmap.Free;
-  PolygonBackgroundBitmap.Free;
   inherited Destroy;
 end;
 
