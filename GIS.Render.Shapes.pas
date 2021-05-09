@@ -12,11 +12,12 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Types,Graphics,Generics.Defaults,Generics.Collections,GIS,GIS.Shapes,
+  Classes,Types,Graphics,Generics.Defaults,Generics.Collections,GIS,GIS.Shapes,
   GIS.Shapes.Polygon,GIS.Shapes.Polygon.PolyLabel,GIS.Render.Shapes.PixelConv;
 
 Type
-  TPointRenderStyle = (rsCircle,rsSquare,rsTriangleDown,rsTriangleUp,rsBitmap);
+  TPointRenderStyle = (rsCircle,rsSquare,rsTriangleDown,rsTriangleUp,rsBitmap,
+                       rsAirport_18dp,rsAirport_24dp,rsAirport_36dp,rsAirport_48dp);
 
   TCustomShapesLayer = Class
   private
@@ -27,6 +28,7 @@ Type
     Viewport: TCoordinateRect;
     Function GetBoundingBoxes(Shape: Integer): TCoordinateRect;
     Procedure InitPointRenderStyle;
+    Procedure SetPointRenderSize(PointRenderSize: Integer);
     Procedure SetPointRenderStyle(PointRenderStyle: TPointRenderStyle);
     Procedure SetPointBitmap(PointBitmap: TBitmap);
     Procedure PointBitmapChange(Sender: TObject);
@@ -96,10 +98,6 @@ Type
     Procedure DrawLayer(const Canvas: TCanvas;
                         const PixelConverter: TCustomPixelConverter;
                         const Width,Height: Integer); overload;
-    {Procedure DrawLayer(const Canvas: TCanvas;
-                        const Backcolor: TColor;
-                        const PixelConverter: TCustomPixelConverter;
-                        const Width,Height: Integer); overload;}
     Procedure DrawLayer(const Bitmap: TBitmap; const PixelConverter: TCustomPixelConverter); overload;
     Destructor Destroy; override;
   public
@@ -125,7 +123,7 @@ Type
   public
     Property Count: Integer read FCount;
     Property Shapes[Shape: Integer]: TGISShape read GetShapes; default;
-    Property PointRenderSize: Integer read FPointRenderSize write FPointRenderSize;
+    Property PointRenderSize: Integer read FPointRenderSize write SetPointRenderSize;
     Property PointRenderStyle: TPointRenderStyle read FPointRenderStyle write SetPointRenderStyle;
     Property PointBitmap: TBitmap read FPointBitmap write SetPointBitmap;
   end;
@@ -133,6 +131,8 @@ Type
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
+
+{$R GIS.Icons.res}
 
 Function TCustomShapesLayer.TPointsRenderer.Shape: TGISShape;
 begin
@@ -162,7 +162,7 @@ begin
       rsTriangleDown: Canvas.Polygon([Types.Point(Pixel.X-Radius,Pixel.Y-Radius),
                                       Types.Point(Pixel.X+Radius,Pixel.Y-Radius),
                                       Types.Point(Pixel.X,Pixel.Y+Radius)]);
-      rsBitmap:
+      else
         begin
           var X := Pixel.X - (Layer.FPointBitmap.Width div 2);
           var Y := Pixel.Y - (Layer.FPointBitmap.Height div 2);
@@ -330,9 +330,27 @@ begin
   FPointRenderSize := 6;
 end;
 
+Procedure TCustomShapesLayer.SetPointRenderSize(PointRenderSize: Integer);
+begin
+  if FPointRenderStyle < rsBitmap then FPointRenderSize := PointRenderSize;
+end;
+
 Procedure TCustomShapesLayer.SetPointRenderStyle(PointRenderStyle: TPointRenderStyle);
 begin
-  if (PointRenderStyle <> rsBitmap) or (not FPointBitmap.Empty) then FPointRenderStyle := PointRenderStyle;
+  FPointRenderStyle := PointRenderStyle;
+  if FPointRenderStyle = rsBitmap then
+  begin
+    if FPointBitmap.Empty then
+      InitPointRenderStyle
+    else
+      FPointRenderSize := FPointBitmap.Width
+  end;
+  if FPointRenderStyle > rsBitmap then
+  begin
+    FPointBitmap.LoadFromResourceId(HInstance,96+Ord(PointRenderStyle));
+    FPointBitmap.Transparent := true;
+    FPointRenderSize := FPointBitmap.Width;
+  end;
 end;
 
 Procedure TCustomShapesLayer.SetPointBitmap(PointBitmap: TBitmap);
@@ -342,7 +360,7 @@ end;
 
 Procedure TCustomShapesLayer.PointBitmapChange(sender: TObject);
 begin
-  if (FPointRenderStyle = rsBitmap) and FPointBitmap.Empty then InitPointRenderStyle;
+  if (FPointRenderStyle >= rsBitmap) and FPointBitmap.Empty then InitPointRenderStyle;
 end;
 
 Function TCustomShapesLayer.ShapeLabel(const Shape: Integer): String;
