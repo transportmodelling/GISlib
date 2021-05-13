@@ -25,7 +25,8 @@ Type
     Function PixelToCoord(const Pixel: TPoint): TCoordinate; overload;
     Function PixelToCoord(const Width,Height: Integer): TCoordinateRect; overload;
     // Get and set center coordinates
-    Function GetCenter(PixelWidth,PixelHeight: Integer): TCoordinate; overload;
+    Function GetCenter(PixelWidth,PixelHeight: Integer): TCoordinate;
+    Function GetViewport(PixelWidth,PixelHeight: Integer): TCoordinateRect;
     Procedure SetCenter(Coord: TCoordinate; PixelWidth,PixelHeight: Integer; ZoomFactor: Float64 = 1.0); overload;
     Procedure Shift(XPixelShift,YPixelShift: Integer);
   public
@@ -67,6 +68,14 @@ Function TCustomPixelConverter.GetCenter(PixelWidth,PixelHeight: Integer): TCoor
 begin
   Result.X := FLeft + PixelWidth*FCoordUnitsPerPixel/2;
   Result.Y := FTop - PixelHeight*FCoordUnitsPerPixel/2;
+end;
+
+Function TCustomPixelConverter.GetViewport(PixelWidth,PixelHeight: Integer): TCoordinateRect;
+begin
+  Result.Left := FLeft;
+  Result.Right := FLeft+PixelWidth*FCoordUnitsPerPixel;
+  Result.Top := FTop;
+  Result.Bottom := FTop-PixelHeight*FCoordUnitsPerPixel;
 end;
 
 Procedure TCustomPixelConverter.SetCenter(Coord: TCoordinate;
