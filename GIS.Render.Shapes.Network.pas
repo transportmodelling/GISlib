@@ -46,6 +46,7 @@ Type
     Constructor Create(const TransparentColor: TColor;
                        const InitialNodesCapacity: Integer = 16384;
                        const InitialLinksCapacity: Integer = 16384);
+    Procedure Clear;
     Function AddNode(X,Y: Float64): Integer; overload;
     Function AddNode(Node: TCoordinate): Integer; overload;
     Procedure AddLink(FromNode,ToNode: Integer); overload;
@@ -134,6 +135,12 @@ end;
 
 Procedure TNetworkLayer.SetPaintStyle(const Link: Integer; const Canvas: TCanvas);
 begin
+end;
+
+Procedure TNetworkLayer.Clear;
+begin
+  FCount := 0;
+  FNodesCount := 0;
 end;
 
 Function TNetworkLayer.AddNode(X,Y: Float64): Integer;
