@@ -17,6 +17,7 @@ Uses
 
 Type
   TPointRenderStyle = (rsCircle,rsSquare,rsTriangleDown,rsTriangleUp,rsBitmap,
+                       rsStation_18dp,rsStation_24dp,rsStation_36dp,rsStation_48dp,
                        rsAirport_18dp,rsAirport_24dp,rsAirport_36dp,rsAirport_48dp);
 
   TCustomShapesLayer = Class
