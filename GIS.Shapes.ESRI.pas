@@ -27,13 +27,47 @@ Type
     Destructor Destroy; override;
   end;
 
-  TESRIShapeFileWriter = record
+  TESRIShapeFileWriter = Class
   private
-    Class Procedure WriteFileHeader(const Writer: TBinaryWriter;
-                                    const ShapeType,FileSize: Integer;
-                                    const [ref] BoundingBox: TCoordinateRect); static;
+    ShapeType,Count: Integer;
+    BoundingBox: TCoordinateRect;
+    ShapesWriter,IndexWriter: TBinaryWriter;
+    Procedure WriteFileHeader(const Writer: TBinaryWriter);
+    Procedure WriteMultiPoints(MultiPoints: TMultiPoints);
+    Procedure UpdateFileHeader(const Writer: TBinaryWriter);
   public
-    Class Procedure WriteShapeFile(FileName: string; const Points: array of TCoordinate); static;
+    Constructor Create(FileName: string);
+    Destructor Destroy; override;
+  end;
+
+  TESRIPointShapeFileWriter = Class(TESRIShapeFileWriter)
+  private
+    Const
+      ContentLength: Integer = 10;
+  public
+    Constructor Create(FileName: string);
+    Procedure Write(X,Y: Float64); overload;
+    Procedure Write(Point: TCoordinate); overload;
+  end;
+
+  TESRIMultiPointShapeFileWriter = Class(TESRIShapeFileWriter)
+  public
+    Constructor Create(FileName: string);
+    Procedure Write(MultiPoint: TMultiPoint);
+  end;
+
+  TESRIPolyLineShapeFileWriter = Class(TESRIShapeFileWriter)
+  public
+    Constructor Create(FileName: string);
+    Procedure Write(Line: TMultiPoint); overload;
+    Procedure Write(PolyLine: TMultiPoints); overload;
+  end;
+
+  TESRIPolygonShapeFileWriter = Class(TESRIShapeFileWriter)
+  public
+    Constructor Create(FileName: string);
+    Procedure Write(Polygon: TMultiPoint); overload;
+    Procedure Write(Polygons: TMultiPoints); overload;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -154,16 +188,28 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Class Procedure TESRIShapeFileWriter.WriteFileHeader(const Writer: TBinaryWriter;
-                                                     const ShapeType,FileSize: Integer;
-                                                     const [ref] BoundingBox: TCoordinateRect);
+Constructor TESRIShapeFileWriter.Create(FileName: string);
+begin
+  inherited Create;
+  // Initialize bounding box
+  BoundingBox.Clear;
+  // Open shapes file
+  FileName := ChangeFileExt(FileName,'.shp');
+  ShapesWriter := TBinaryWriter.Create(FileName,false);
+  WriteFileHeader(ShapesWriter);
+  // Open index file
+  FileName := ChangeFileExt(FileName,'.shx');
+  IndexWriter := TBinaryWriter.Create(FileName,false);
+  WriteFileHeader(IndexWriter);
+end;
+
+Procedure TESRIShapeFileWriter.WriteFileHeader(const Writer: TBinaryWriter);
 Const
   Unused: Integer = 0;
   MZCoord: Float64 = 0.0;
 begin
   Writer.Write(Swop(ShapeFileCode));
-  for var Cnt := 1 to 5 do Writer.Write(Unused);
-  Writer.Write(Swop(FileSize));
+  for var Cnt := 1 to 6 do Writer.Write(Unused);
   Writer.Write(Version);
   Writer.Write(ShapeType);
   Writer.Write(BoundingBox.Left);
@@ -173,46 +219,184 @@ begin
   for var Cnt := 1 to 4 do Writer.Write(MZCoord);
 end;
 
-Class Procedure TESRIShapeFileWriter.WriteShapeFile(FileName: string; const Points: array of TCoordinate);
-Const
-  ContentLength: Integer = 10;
+Procedure TESRIShapeFileWriter.WriteMultiPoints(MultiPoints: TMultiPoints);
 Var
-  BoundingBox: TCoordinateRect;
-  ShapesWriter,IndexWriter: TBinaryWriter;
+  Indices: array of Int32;
+  ShapeBoundingBox: TCoordinateRect;
 begin
-  ShapesWriter := nil;
-  IndexWriter := nil;
-  try
-    var NPoints := Length(Points);
-    var ShapeType: Integer := PointShape;
-    // Open files
-    FileName := ChangeFileExt(FileName,'.shp');
-    ShapesWriter := TBinaryWriter.Create(FileName,false);
-    FileName := ChangeFileExt(FileName,'.shx');
-    IndexWriter := TBinaryWriter.Create(FileName,false);
-    // Calculate bounding box
-    BoundingBox.Clear;
-    BoundingBox.Enclose(Points);
-    // Write headers
-    WriteFileHeader(ShapesWriter,ShapeType,50+14*NPoints,BoundingBox);
-    WriteFileHeader(IndexWriter,ShapeType,50+4*NPoints,BoundingBox);
-    // Write points
-    for var Point := low(Points) to high(Points) do
-    begin
-      // Write index file
-      IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
-      IndexWriter.Write(Swop(ContentLength));
-      // Write shape file
-      ShapesWriter.Write(Swop(Point+1));
-      ShapesWriter.Write(Swop(ContentLength));
-      ShapesWriter.Write(ShapeType);
-      ShapesWriter.Write(Points[Point].X);
-      ShapesWriter.Write(Points[Point].Y);
-    end;
-  finally
-    ShapesWriter.Free;
-    IndexWriter.Free;
+  Inc(Count);
+  var NParts: Int32 := Length(MultiPoints);
+  // Calculate shape bounding box and set part indices
+  var NPoints: Int32 := 0;
+  ShapeBoundingBox.Clear;
+  SetLength(Indices,NParts);
+  for var Part := 0 to NParts-1 do
+  begin
+    Indices[Part] := NPoints;
+    Inc(NPoints,Length(MultiPoints[Part]));
+    ShapeBoundingBox.Enclose(MultiPoints[Part]);
   end;
+  BoundingBox.Enclose(ShapeBoundingBox);
+  // Write index file
+  var ContentLength: Int32 := 22+2*NParts+8*NPoints;
+  IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(Swop(ContentLength));
+  // Write shape file
+  ShapesWriter.Write(Swop(Count));
+  ShapesWriter.Write(Swop(ContentLength));
+  ShapesWriter.Write(ShapeType);
+  ShapesWriter.Write(ShapeBoundingBox.Left);
+  ShapesWriter.Write(ShapeBoundingBox.Bottom);
+  ShapesWriter.Write(ShapeBoundingBox.Right);
+  ShapesWriter.Write(ShapeBoundingBox.Top);
+  ShapesWriter.Write(NParts);
+  ShapesWriter.Write(NPoints);
+  for var Part := 0 to NParts-1 do ShapesWriter.Write(Indices[Part]);
+  for var Part := 0 to NParts-1 do
+  for var Point := low(MultiPoints[Part]) to high(MultiPoints[Part]) do
+  begin
+    ShapesWriter.Write(MultiPoints[Part,Point].X);
+    ShapesWriter.Write(MultiPoints[Part,Point].Y);
+  end;
+end;
+
+Procedure TESRIShapeFileWriter.UpdateFileHeader(const Writer: TBinaryWriter);
+begin
+  // Update file size
+  var FileSize: Int32 := Writer.BaseStream.Size div 2;
+  Writer.BaseStream.Position := 24;
+  Writer.Write(Swop(FileSize));
+  // Update bounding box
+  Writer.BaseStream.Position := 36;
+  Writer.Write(BoundingBox.Left);
+  Writer.Write(BoundingBox.Bottom);
+  Writer.Write(BoundingBox.Right);
+  Writer.Write(BoundingBox.Top);
+  // Close file
+  Writer.Free;
+end;
+
+Destructor TESRIShapeFileWriter.Destroy;
+begin
+  // Close files
+  UpdateFileHeader(ShapesWriter);
+  UpdateFileHeader(IndexWriter);
+  inherited Destroy;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TESRIPointShapeFileWriter.Create(FileName: string);
+begin
+  ShapeType := PointShape;
+  inherited Create(FileName);
+end;
+
+Procedure TESRIPointShapeFileWriter.Write(X,Y: Float64);
+begin
+  Write(TCoordinate.Create(X,Y));
+end;
+
+Procedure TESRIPointShapeFileWriter.Write(Point: TCoordinate);
+begin
+  Inc(Count);
+  BoundingBox.Enclose(Point);
+  // Write index file
+  IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(Swop(ContentLength));
+  // Write shape file
+  ShapesWriter.Write(Swop(Count));
+  ShapesWriter.Write(Swop(ContentLength));
+  ShapesWriter.Write(ShapeType);
+  ShapesWriter.Write(Point.X);
+  ShapesWriter.Write(Point.Y);
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TESRIMultiPointShapeFileWriter.Create(FileName: string);
+begin
+  ShapeType := MultiPointShape;
+  inherited Create(FileName);
+end;
+
+Procedure TESRIMultiPointShapeFileWriter.Write(MultiPoint: TMultiPoint);
+Var
+  ShapeBoundingBox: TCoordinateRect;
+begin
+  Inc(Count);
+  // Calculate content length
+  var NPoints: Int32 := Length(MultiPoint);
+  var ContentLength: Int32 := 20+8*NPoints;
+  // Calculate bounding box
+  ShapeBoundingBox.Clear;
+  for var Point := 0 to NPoints-1 do ShapeBoundingBox.Enclose(MultiPoint[Point]);
+  BoundingBox.Enclose(ShapeBoundingBox);
+  // Write index file
+  IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(Swop(ContentLength));
+  // Write shape file
+  ShapesWriter.Write(Swop(Count));
+  ShapesWriter.Write(Swop(ContentLength));
+  ShapesWriter.Write(ShapeType);
+  ShapesWriter.Write(ShapeBoundingBox.Left);
+  ShapesWriter.Write(ShapeBoundingBox.Bottom);
+  ShapesWriter.Write(ShapeBoundingBox.Right);
+  ShapesWriter.Write(ShapeBoundingBox.Top);
+  ShapesWriter.Write(NPoints);
+  for var Point := 0 to NPoints-1 do
+  begin
+    ShapesWriter.Write(MultiPoint[Point].X);
+    ShapesWriter.Write(MultiPoint[Point].Y);
+  end;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TESRIPolyLineShapeFileWriter.Create(FileName: string);
+begin
+  ShapeType := PolyLineShape;
+  inherited Create(FileName);
+end;
+
+Procedure TESRIPolyLineShapeFileWriter.Write(Line: TMultiPoint);
+begin
+  WriteMultiPoints([Line]);
+end;
+
+Procedure TESRIPolyLineShapeFileWriter.Write(PolyLine: TMultiPoints);
+begin
+  WriteMultiPoints(PolyLine);
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TESRIPolygonShapeFileWriter.Create(FileName: string);
+begin
+  ShapeType := PolygonShape;
+  inherited Create(FileName);
+end;
+
+Procedure TESRIPolygonShapeFileWriter.Write(Polygon: TMultiPoint);
+begin
+  Write([Polygon]);
+end;
+
+Procedure TESRIPolygonShapeFileWriter.Write(Polygons: TMultiPoints);
+begin
+  // Close polygons
+  for var Part := low(Polygons) to high(Polygons) do
+  begin
+    var NPoints := Length(Polygons[Part]);
+    if NPoints > 1 then
+      if (Polygons[Part,0].X <> Polygons[Part,NPoints-1].X)
+      or (Polygons[Part,0].Y <> Polygons[Part,NPoints-1].Y) then
+      Polygons[Part] := Polygons[Part] + [Polygons[Part,0]]
+    else
+      raise Exception.Create('Invalid polygon');
+  end;
+  // Write polygons
+  WriteMultiPoints(Polygons);
 end;
 
 end.

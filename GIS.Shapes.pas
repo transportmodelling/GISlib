@@ -17,7 +17,8 @@ Uses
 Type
   TShapeType = (stEmpty,stPoint,stLine,stPolygon);
 
-  TMultiPoints = array {part} of array {point} of TCoordinate;
+  TMultiPoint = array {point} of TCoordinate;
+  TMultiPoints = array {part} of TMultiPoint;
 
   TShapePart = record
   private
