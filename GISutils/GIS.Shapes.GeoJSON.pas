@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  System.JSON.Types,System.JSON.Writers,GIS,GIS.Shapes;
+  System.Rtti,System.Generics.Collections,System.JSON.Types,System.JSON.Writers,GIS,GIS.Shapes;
 
 Type
   TGeoJSONWriter = Class
@@ -24,15 +24,15 @@ Type
     Procedure WriteCoordinateValue(const Point: TCoordinate);
     Procedure WriteCoordinateValues(const MultiPoint: TMultiPoint); overload;
     Procedure WriteCoordinateValues(const MultiPoints: TMultiPoints); overload;
-    Procedure WriteEndFeature;
+    Procedure WriteEndFeature(const Properties: array of TPair<String,TValue>);
   public
     Constructor Create(const FileName: String;
                        const Formatting: TJSONFormatting = TJSONFormatting.Indented);
-    Procedure WritePoint(X,Y: Float64); overload;
-    Procedure WritePoint(Point: TCoordinate); overload;
-    Procedure WriteMultiPoint(MultiPoint: TMultiPoint);
-    Procedure WriteLineString(LineString: TMultiPoint);
-    Procedure WriteMultiLineString(MultiLineString: TMultiPoints);
+    Procedure WritePoint(X,Y: Float64; const Properties: array of TPair<String,TValue>); overload;
+    Procedure WritePoint(Point: TCoordinate; const Properties: array of TPair<String,TValue>); overload;
+    Procedure WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: array of TPair<String,TValue>);
+    Procedure WriteLineString(LineString: TMultiPoint; const Properties: array of TPair<String,TValue>);
+    Procedure WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: array of TPair<String,TValue>);
     Destructor Destroy; override;
   end;
 
@@ -105,46 +105,51 @@ begin
   JSONWriter.WriteEndArray;
 end;
 
-Procedure TGeoJSONWriter.WriteEndFeature;
+Procedure TGeoJSONWriter.WriteEndFeature(const Properties: array of TPair<String,TValue>);
 begin
   JSONWriter.WriteEndObject;
   JSONWriter.WritePropertyName('properties');
   JSONWriter.WriteStartObject;
+  for var Prop := low(Properties) to high(Properties) do
+  begin
+    JSONWriter.WritePropertyName(Properties[Prop].Key);
+    JSONWriter.WriteValue(Properties[Prop].Value);
+  end;
   JSONWriter.WriteEndObject;
   JSONWriter.WriteEndObject;
 end;
 
-Procedure TGeoJSONWriter.WritePoint(X,Y: Float64);
+Procedure TGeoJSONWriter.WritePoint(X,Y: Float64; const Properties: array of TPair<String,TValue>);
 begin
-  WritePoint(TCoordinate.Create(X,Y));
+  WritePoint(TCoordinate.Create(X,Y),Properties);
 end;
 
-Procedure TGeoJSONWriter.WritePoint(Point: TCoordinate);
+Procedure TGeoJSONWriter.WritePoint(Point: TCoordinate; const Properties: array of TPair<String,TValue>);
 begin
   WriteStartFeature('Point');
   WriteCoordinateValue(Point);
-  WriteEndFeature;
+  WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteMultiPoint(MultiPoint: TMultiPoint);
+Procedure TGeoJSONWriter.WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: array of TPair<String,TValue>);
 begin
   WriteStartFeature('MultiPoint');
   WriteCoordinateValues(MultiPoint);
-  WriteEndFeature;
+  WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteLineString(LineString: TMultiPoint);
+Procedure TGeoJSONWriter.WriteLineString(LineString: TMultiPoint; const Properties: array of TPair<String,TValue>);
 begin
   WriteStartFeature('LineString');
   WriteCoordinateValues(LineString);
-  WriteEndFeature;
+  WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteMultiLineString(MultiLineString: TMultiPoints);
+Procedure TGeoJSONWriter.WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: array of TPair<String,TValue>);
 begin
   WriteStartFeature('MultiLineString');
   WriteCoordinateValues(MultiLineString);
-  WriteEndFeature;
+  WriteEndFeature(Properties);
 end;
 
 Destructor TGeoJSONWriter.Destroy;
