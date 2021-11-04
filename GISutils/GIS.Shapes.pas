@@ -273,7 +273,7 @@ Function TShapesReader.ReadShape(out Shape: TGISShape): Boolean;
 Var
   Properties: TArray<TPair<String,Variant>>;
 begin
-  ReadShape(Shape,Properties);
+  Result := ReadShape(Shape,Properties);
 end;
 
 end.
