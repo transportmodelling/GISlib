@@ -12,18 +12,20 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes,SysUtils,GIS,GIS.Shapes;
+  Classes,SysUtils,Generics.Collections,DBF,GIS,GIS.Shapes;
 
 Type
   TESRIShapeFileReader = Class(TShapesReader)
   private
-    FileStream: TBufferedFileStream;
-    FileReader: TBinaryReader;
+    ShapesStream: TBufferedFileStream;
+    ShapesReader: TBinaryReader;
+    DBFReader: TDBFReader;
     Function ReadPoints: TArray<TCoordinate>;
     Function ReadParts: TMultiPoints;
   public
-    Constructor Create(const FileName: string); override;
-    Function ReadShape(out Shape: TGISShape): Boolean; override;
+    Constructor Create(FileName: string); override;
+    Function IndexOf(const PropertyName: String): Integer;
+    Function ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean; override;
     Destructor Destroy; override;
   end;
 
@@ -32,11 +34,13 @@ Type
     ShapeType,Count: Integer;
     BoundingBox: TCoordinateRect;
     ShapesWriter,IndexWriter: TBinaryWriter;
+    DBFWriter: TDBFWriter;
     Procedure WriteFileHeader(const Writer: TBinaryWriter);
     Procedure WriteMultiPoints(MultiPoints: TMultiPoints);
     Procedure UpdateFileHeader(const Writer: TBinaryWriter);
+    Procedure WriteProperties(const Properties: array of Variant);
   public
-    Constructor Create(FileName: string);
+    Constructor Create(FileName: string; const Properties: array of TDBFField);
     Destructor Destroy; override;
   end;
 
@@ -45,29 +49,29 @@ Type
     Const
       ContentLength: Integer = 10;
   public
-    Constructor Create(FileName: string);
-    Procedure Write(X,Y: Float64); overload;
-    Procedure Write(Point: TCoordinate); overload;
+    Constructor Create(FileName: string; const Properties: array of TDBFField);
+    Procedure Write(X,Y: Float64; const Properties: array of Variant); overload;
+    Procedure Write(Point: TCoordinate; const Properties: array of Variant); overload;
   end;
 
   TESRIMultiPointShapeFileWriter = Class(TESRIShapeFileWriter)
   public
-    Constructor Create(FileName: string);
-    Procedure Write(MultiPoint: TMultiPoint);
+    Constructor Create(FileName: string; const Properties: array of TDBFField);
+    Procedure Write(MultiPoint: TMultiPoint; const Properties: array of Variant);
   end;
 
   TESRIPolyLineShapeFileWriter = Class(TESRIShapeFileWriter)
   public
-    Constructor Create(FileName: string);
-    Procedure Write(Line: TMultiPoint); overload;
-    Procedure Write(PolyLine: TMultiPoints); overload;
+    Constructor Create(FileName: string; const Properties: array of TDBFField);
+    Procedure Write(Line: TMultiPoint; const Properties: array of Variant); overload;
+    Procedure Write(PolyLine: TMultiPoints; const Properties: array of Variant); overload;
   end;
 
   TESRIPolygonShapeFileWriter = Class(TESRIShapeFileWriter)
   public
-    Constructor Create(FileName: string);
-    Procedure Write(Polygon: TMultiPoint); overload;
-    Procedure Write(Polygons: TMultiPoints); overload;
+    Constructor Create(FileName: string; const Properties: array of TDBFField);
+    Procedure Write(Polygon: TMultiPoint; const Properties: array of Variant); overload;
+    Procedure Write(Polygons: TMultiPoints; const Properties: array of Variant); overload;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,29 +101,42 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIShapeFileReader.Create(const FileName: string);
+Constructor TESRIShapeFileReader.Create(FileName: string);
 begin
   inherited Create(FileName);
-  FileStream := TBufferedFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
-  FileReader := TBinaryReader.Create(FileStream);
-  var FileCode := FileReader.ReadInt32;
+  // Open shapes file
+  FileName := ChangeFileExt(FileName,'.shp');
+  ShapesStream := TBufferedFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
+  ShapesReader := TBinaryReader.Create(ShapesStream);
+  var FileCode := ShapesReader.ReadInt32;
   if Swop(FileCode) = ShapeFileCode then
-    for var Skip := 1 to 24 do FileReader.ReadInt32
+    for var Skip := 1 to 24 do ShapesReader.ReadInt32
   else
     raise exception.Create('Invalid File Code in Shape file header');
+  // Open DBF-file
+  FileName := ChangeFileExt(FileName,'.dbf');
+  if FileExists(FileName) then DBFReader := TDBFReader.Create(FileName);
+end;
+
+Function TESRIShapeFileReader.IndexOf(const PropertyName: String): Integer;
+begin
+  if DBFReader <> nil then
+    Result := DBFReader.IndexOf(PropertyName)
+  else
+    Result := -1;
 end;
 
 Function TESRIShapeFileReader.ReadPoints: TArray<TCoordinate>;
 begin
   // Skip bounding box
-  for var Skip := 1 to 4 do FileReader.ReadDouble;
+  for var Skip := 1 to 4 do ShapesReader.ReadDouble;
   // Read points
-  var NPoints := FileReader.ReadInt32;
+  var NPoints := ShapesReader.ReadInt32;
   SetLength(Result,NPoints);
   for var Point := 0 to NPoints-1 do
   begin
-    Result[Point].X := FileReader.ReadDouble;
-    Result[Point].Y := FileReader.ReadDouble;
+    Result[Point].X := ShapesReader.ReadDouble;
+    Result[Point].Y := ShapesReader.ReadDouble;
   end;
 end;
 
@@ -129,12 +146,12 @@ Var
   FirstPointInPart: array of Integer;
 begin
   // Skip bounding box
-  for var Skip := 1 to 4 do FileReader.ReadDouble;
+  for var Skip := 1 to 4 do ShapesReader.ReadDouble;
   // Read offsets
-  var NParts := FileReader.ReadInt32;
-  var NPoints := FileReader.ReadInt32;
+  var NParts := ShapesReader.ReadInt32;
+  var NPoints := ShapesReader.ReadInt32;
   SetLength(FirstPointInPart,NParts);
-  for var Part := 0 to NParts-1 do FirstPointInPart[Part] := FileReader.ReadInt32;
+  for var Part := 0 to NParts-1 do FirstPointInPart[Part] := ShapesReader.ReadInt32;
   // Read parts
   SetLength(Result,NParts);
   for var Part := 0 to NParts-1 do
@@ -148,25 +165,25 @@ begin
     SetLength(Result[Part],Count);
     for var Point := 0 to Count-1 do
     begin
-      Result[Part,Point].X := FileReader.ReadDouble;
-      Result[Part,Point].Y := FileReader.ReadDouble;
+      Result[Part,Point].X := ShapesReader.ReadDouble;
+      Result[Part,Point].Y := ShapesReader.ReadDouble;
     end;
   end;
 end;
 
-Function TESRIShapeFileReader.ReadShape(out Shape: TGISShape): Boolean;
+Function TESRIShapeFileReader.ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean;
 begin
-  if FileStream.Position < FileStream.Size then
+  if ShapesStream.Position < ShapesStream.Size then
   begin
     Result := true;
-    for var Skip := 1 to 2 do FileReader.ReadInt32;
+    for var Skip := 1 to 2 do ShapesReader.ReadInt32;
     // Read shape
-    var ShapeType := FileReader.ReadInt32;
+    var ShapeType := ShapesReader.ReadInt32;
     case ShapeType of
       NullShape:
          Result := ReadShape(Shape);
       PointShape:
-         Shape.AssignPoint(FileReader.ReadDouble,FileReader.ReadDouble);
+         Shape.AssignPoint(ShapesReader.ReadDouble,ShapesReader.ReadDouble);
       PolyLineShape:
          Shape.AssignPolyLine(ReadParts);
       PolygonShape:
@@ -175,20 +192,29 @@ begin
          Shape.AssignPoints(ReadPoints);
       else raise Exception.Create('Shape type not supported');
     end;
+    // Read properties
+    if DBFReader <> nil then
+      if DBFReader.NextRecord then
+        Properties := DBFReader.GetPairs
+      else
+        raise Exception.Create('Error reading properties')
+    else
+      Properties := []
   end else
     Result := false;
 end;
 
 Destructor TESRIShapeFileReader.Destroy;
 begin
-  FileStream.Free;
-  FileReader.Free;
+  ShapesStream.Free;
+  ShapesReader.Free;
+  DBFReader.Free;
   inherited Destroy;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIShapeFileWriter.Create(FileName: string);
+Constructor TESRIShapeFileWriter.Create(FileName: string; const Properties: array of TDBFField);
 begin
   inherited Create;
   // Initialize bounding box
@@ -201,6 +227,12 @@ begin
   FileName := ChangeFileExt(FileName,'.shx');
   IndexWriter := TBinaryWriter.Create(FileName,false);
   WriteFileHeader(IndexWriter);
+  // Open DBF file
+  if Length(Properties) > 0 then
+  begin
+    FileName := ChangeFileExt(FileName,'.dbf');
+    DBFWriter := TDBFWriter.Create(FileName,Properties);
+  end;
 end;
 
 Procedure TESRIShapeFileWriter.WriteFileHeader(const Writer: TBinaryWriter);
@@ -276,28 +308,37 @@ begin
   Writer.Free;
 end;
 
+Procedure TESRIShapeFileWriter.WriteProperties(const Properties: array of Variant);
+begin
+  if DBFWriter <> nil then
+    DBFWriter.AppendRecord(Properties)
+  else
+    if Length(Properties) > 0 then raise Exception.Create('Invalid number of propertries');
+end;
+
 Destructor TESRIShapeFileWriter.Destroy;
 begin
   // Close files
   UpdateFileHeader(ShapesWriter);
   UpdateFileHeader(IndexWriter);
+  DBFWriter.Free;
   inherited Destroy;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIPointShapeFileWriter.Create(FileName: string);
+Constructor TESRIPointShapeFileWriter.Create(FileName: string; const Properties: array of TDBFField);
 begin
   ShapeType := PointShape;
-  inherited Create(FileName);
+  inherited Create(FileName,Properties);
 end;
 
-Procedure TESRIPointShapeFileWriter.Write(X,Y: Float64);
+Procedure TESRIPointShapeFileWriter.Write(X,Y: Float64; const Properties: array of Variant);
 begin
-  Write(TCoordinate.Create(X,Y));
+  Write(TCoordinate.Create(X,Y),Properties);
 end;
 
-Procedure TESRIPointShapeFileWriter.Write(Point: TCoordinate);
+Procedure TESRIPointShapeFileWriter.Write(Point: TCoordinate; const Properties: array of Variant);
 begin
   Inc(Count);
   BoundingBox.Enclose(Point);
@@ -310,17 +351,19 @@ begin
   ShapesWriter.Write(ShapeType);
   ShapesWriter.Write(Point.X);
   ShapesWriter.Write(Point.Y);
+  // Write properties
+  WriteProperties(Properties);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIMultiPointShapeFileWriter.Create(FileName: string);
+Constructor TESRIMultiPointShapeFileWriter.Create(FileName: string; const Properties: array of TDBFField);
 begin
   ShapeType := MultiPointShape;
-  inherited Create(FileName);
+  inherited Create(FileName,Properties);
 end;
 
-Procedure TESRIMultiPointShapeFileWriter.Write(MultiPoint: TMultiPoint);
+Procedure TESRIMultiPointShapeFileWriter.Write(MultiPoint: TMultiPoint; const Properties: array of Variant);
 Var
   ShapeBoundingBox: TCoordinateRect;
 begin
@@ -349,40 +392,44 @@ begin
     ShapesWriter.Write(MultiPoint[Point].X);
     ShapesWriter.Write(MultiPoint[Point].Y);
   end;
+  // Write properties
+  WriteProperties(Properties);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIPolyLineShapeFileWriter.Create(FileName: string);
+Constructor TESRIPolyLineShapeFileWriter.Create(FileName: string; const Properties: array of TDBFField);
 begin
   ShapeType := PolyLineShape;
-  inherited Create(FileName);
+  inherited Create(FileName,Properties);
 end;
 
-Procedure TESRIPolyLineShapeFileWriter.Write(Line: TMultiPoint);
+Procedure TESRIPolyLineShapeFileWriter.Write(Line: TMultiPoint; const Properties: array of Variant);
 begin
   WriteMultiPoints([Line]);
+  WriteProperties(Properties);
 end;
 
-Procedure TESRIPolyLineShapeFileWriter.Write(PolyLine: TMultiPoints);
+Procedure TESRIPolyLineShapeFileWriter.Write(PolyLine: TMultiPoints; const Properties: array of Variant);
 begin
   WriteMultiPoints(PolyLine);
+  WriteProperties(Properties);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIPolygonShapeFileWriter.Create(FileName: string);
+Constructor TESRIPolygonShapeFileWriter.Create(FileName: string; const Properties: array of TDBFField);
 begin
   ShapeType := PolygonShape;
-  inherited Create(FileName);
+  inherited Create(FileName,Properties);
 end;
 
-Procedure TESRIPolygonShapeFileWriter.Write(Polygon: TMultiPoint);
+Procedure TESRIPolygonShapeFileWriter.Write(Polygon: TMultiPoint; const Properties: array of Variant);
 begin
-  Write([Polygon]);
+  Write([Polygon],Properties);
 end;
 
-Procedure TESRIPolygonShapeFileWriter.Write(Polygons: TMultiPoints);
+Procedure TESRIPolygonShapeFileWriter.Write(Polygons: TMultiPoints; const Properties: array of Variant);
 begin
   // Close polygons
   for var Part := low(Polygons) to high(Polygons) do
@@ -397,6 +444,8 @@ begin
   end;
   // Write polygons
   WriteMultiPoints(Polygons);
+  // Write properties
+  WriteProperties(Properties);
 end;
 
 end.
