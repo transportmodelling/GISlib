@@ -22,7 +22,7 @@ Type
 
   TShapePart = record
   private
-    FPoints: array of TCoordinate;
+    FPoints: TMultiPoint;
     FBoundingBox: TCoordinateRect;
     Function GetPoints(Point: Integer): TCoordinate; inline;
   public
@@ -31,6 +31,7 @@ Type
     Function Empty: Boolean;
     Function Count: Integer;
     Function BoundingBox: TCoordinateRect;
+    Function AsMultiPoint: TMultiPoint;
   public
     Property Points[Point: Integer]: TCoordinate read GetPoints; default;
   end;
@@ -122,6 +123,11 @@ end;
 Function TShapePart.BoundingBox: TCoordinateRect;
 begin
   if Empty then Result.Clear else Result := FBoundingBox;
+end;
+
+Function TShapePart.AsMultiPoint: TMultiPoint;
+begin
+  Result := Copy(FPoints);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
