@@ -133,7 +133,7 @@ Type
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-{$R GIS.Icons.res}
+{$R GIS.res}
 
 Function TCustomShapesLayer.TPointsRenderer.Shape: TGISShape;
 begin
