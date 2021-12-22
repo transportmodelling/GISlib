@@ -319,8 +319,8 @@ end;
 Destructor TESRIShapeFileWriter.Destroy;
 begin
   // Close files
-  UpdateFileHeader(ShapesWriter);
-  UpdateFileHeader(IndexWriter);
+  if ShapesWriter <> nil then UpdateFileHeader(ShapesWriter);
+  if IndexWriter <> nil then UpdateFileHeader(IndexWriter);
   DBFWriter.Free;
   inherited Destroy;
 end;
