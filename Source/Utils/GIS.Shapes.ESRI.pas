@@ -23,8 +23,9 @@ Type
     Function ReadPoints: TArray<TCoordinate>;
     Function ReadParts: TMultiPoints;
   public
-    Constructor Create(FileName: string); override;
-    Function IndexOf(const PropertyName: String): Integer;
+    Constructor Create(FileName: string); overload; override;
+    Constructor Create(FileName: string; ReadProperties: Boolean); overload;
+    Function IndexOf(const PropertyName: String; const MustExist: Boolean = false): Integer;
     Function ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean; override;
     Destructor Destroy; override;
   end;
@@ -103,6 +104,11 @@ end;
 
 Constructor TESRIShapeFileReader.Create(FileName: string);
 begin
+  Create(FileName,true);
+end;
+
+Constructor TESRIShapeFileReader.Create(FileName: string; ReadProperties: Boolean);
+begin
   inherited Create(FileName);
   // Open shapes file
   FileName := ChangeFileExt(FileName,'.shp');
@@ -114,16 +120,22 @@ begin
   else
     raise exception.Create('Invalid File Code in Shape file header');
   // Open DBF-file
-  FileName := ChangeFileExt(FileName,'.dbf');
-  if FileExists(FileName) then DBFReader := TDBFReader.Create(FileName);
+  if ReadProperties then
+  begin
+    FileName := ChangeFileExt(FileName,'.dbf');
+    if FileExists(FileName) then DBFReader := TDBFReader.Create(FileName);
+  end;
 end;
 
-Function TESRIShapeFileReader.IndexOf(const PropertyName: String): Integer;
+Function TESRIShapeFileReader.IndexOf(const PropertyName: String; const MustExist: Boolean = false): Integer;
 begin
   if DBFReader <> nil then
-    Result := DBFReader.IndexOf(PropertyName)
+    Result := DBFReader.IndexOf(PropertyName,MustExist)
   else
-    Result := -1;
+    begin
+      Result := -1;
+      if MustExist then raise Exception.Create('dbf file is not read');
+    end;
 end;
 
 Function TESRIShapeFileReader.ReadPoints: TArray<TCoordinate>;
