@@ -31,7 +31,8 @@ Type
   public
     Function HolesCount: Integer;
     Function PointLocation(const [ref] Point: TCoordinate; out Hole: Integer): TPointLocation;
-    Function Distance(const [ref] Point: TCoordinate; out Location: TPointLocation): Float64;
+    Function Distance(const [ref] Point: TCoordinate): Float64; overload;
+    Function Distance(const [ref] Point: TCoordinate; out Location: TPointLocation): Float64; overload;
   public
     Property OuterRing: TShapePart read FOuterRing;
     Property Holes[Hole: Integer]: TShapePart read GetHoles;
@@ -44,6 +45,7 @@ Type
   public
     Constructor Create(const [ref] PolyPolygons: TGISShape);
     Function Count: Integer;
+    Function Distance(const [ref] Point: TCoordinate): Float64;
     Function Contains(const [ref] Point: TCoordinate): Boolean;
   public
     Property PolyPolygons[PolyPolygon: Integer]: TPolyPolygon read GetPolyPolygons; default;
@@ -186,8 +188,25 @@ begin
     Result := plExterior;
 end;
 
+Function TPolyPolygon.Distance(const [ref] Point: TCoordinate): Float64;
+// Returns zero when point is in interior of polygon
+Var
+  Hole: Integer;
+begin
+  var Location := PointLocation(Point,Hole);
+  case Location of
+    plExterior:
+      Result := DistanceToRing(Point,FOuterRing);
+    plHole:
+      Result := DistanceToRing(Point,FHoles[Hole]);
+    plInterior:
+      Result := 0;
+  end;
+end;
+
 Function TPolyPolygon.Distance(const [ref] Point: TCoordinate;
                                out Location: TPointLocation): Float64;
+// Returns distance to nearest edge when point is in interior of polygon
 Var
   Hole: Integer;
 begin
@@ -303,6 +322,17 @@ end;
 Function TPolyPolygons.Count: Integer;
 begin
   Result := Length(FPolyPolygons);
+end;
+
+Function TPolyPolygons.Distance(const [ref] Point: TCoordinate): Float64;
+// Returns zero when point is in interior of polygon
+begin
+  Result := Infinity;
+  for var Polygon := 0 to Count-1 do
+  begin
+    var Dist := FPolyPolygons[Polygon].Distance(Point);
+    if Dist < Result then Result := Dist;
+  end;
 end;
 
 Function TPolyPolygons.Contains(const [ref] Point: TCoordinate): Boolean;
