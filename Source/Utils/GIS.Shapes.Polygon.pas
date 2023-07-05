@@ -19,8 +19,7 @@ Type
 
   TPolyPolygon = record
   private
-    Class Function RingArea(const Points: array of TCoordinate): Float64; static;
-    Class Function LineSegmentsIntersect(const A,B,P,Q: TCoordinate): Boolean; static;
+    Class Function Intersecting(const Point,A,B: TCoordinate): Boolean; static;
     Class Function NrIntersections(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Integer; static;
     Class Function PointInRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Boolean; static;
   private
@@ -45,6 +44,7 @@ Type
   public
     Constructor Create(const [ref] PolyPolygons: TGISShape);
     Function Count: Integer;
+    Function Contains(const [ref] Point: TCoordinate): Boolean;
   public
     Property PolyPolygons[PolyPolygon: Integer]: TPolyPolygon read GetPolyPolygons; default;
   end;
@@ -58,43 +58,34 @@ begin
   Result := FHoles[Hole];
 end;
 
-Class Function TPolyPolygon.RingArea(const Points: array of TCoordinate): Float64;
-var
-  BoundingBox: TCoordinateRect;
+Class Function TPolyPolygon.Intersecting(const Point,A,B: TCoordinate): Boolean;
+// Tests whether the line from Point to (infinity,Point.Y) and line segment AB intersect
 begin
-  // Calculate ring center, so the ring can be moved to the origin for numerical stability
-  BoundingBox.Clear;
-  BoundingBox.Enclose(Points);
-  var Center := BoundingBox.CenterPoint;
-  var X0 := Center.X;
-  var Y0 := Center.Y;
-  // Calculate area
-  Result := 0.0;
-  for var Point := low(Points) to pred(high(Points)) do
-  Result := Result + (Points[Point].X-X0)*(Points[Point+1].Y-Y0)
-                   - (Points[Point+1].X-X0)*(Points[Point].Y-Y0);
-end;
-
-Class Function TPolyPolygon.LineSegmentsIntersect(const A,B,P,Q: TCoordinate): Boolean;
-// Tests whether line segments AB and PQ intersect
-// (does not handle the case where AB and PQ are collinear)
-begin
-  if RingArea([A,B,P])*RingArea([A,B,Q]) < 0.0 then
-    if RingArea([P,Q,A])*RingArea([P,Q,B]) < 0.0 then
-      Result := true
+  if (A.Y > Point.Y) and (B.Y > Point.Y) then Result := false else // AB positioned above line
+  if (A.Y < Point.Y) and (B.Y < Point.Y) then Result := false else // AB positioned below line
+  if (A.X < Point.X) and (B.X < Point.X) then Result := false else // AB positioned to the left of line
+  if (A.X >= Point.X) and (B.X >= Point.X) then Result := true else
+  if (A.Y = Point.Y) and (B.Y = Point.Y) then Result := true else
+  if A.X < B.X then
+    if A.Y < B.Y then
+      Result := (Point.X-A.X)*(B.Y-A.Y) <= (Point.Y-A.Y)*(B.X-A.X)
     else
-      Result := false
+      Result := (Point.X-A.X)*(A.Y-B.Y) <= (A.Y-Point.Y)*(B.X-A.X)
   else
-    Result := false;
+    if B.Y < A.Y then
+      Result := (Point.X-B.X)*(A.Y-B.Y) <= (Point.Y-B.Y)*(A.X-B.X)
+    else
+      Result := (Point.X-B.X)*(B.Y-A.Y) <= (B.Y-Point.Y)*(A.X-B.X);
 end;
 
 Class Function TPolyPolygon.NrIntersections(const [ref] Point: TCoordinate;
                                             const [ref] Ring: TShapePart): Integer;
-// Returns the number of intersection between Ring
-// and the line from Point to Point(infinity,Point.Y).
+// Returns the number of intersection between Ring and the line from Point to (infinity,Point.Y).
 Const
   Below = -1;
   Above = +1;
+var
+  CurrentPoint,PreviousPoint: TCoordinate;
 begin
   Result := 0;
   if Ring.Count > 0 then
@@ -111,32 +102,43 @@ begin
     if First < Ring.Count then
     begin
       var Previous := First;
-      var TestPoint := TCoordinate.Create(Ring.BoundingBox.Right+Ring.BoundingBox.Width,Point.Y);
+      PreviousPoint := Ring.Points[First];
       for var Vertex := 1 to Ring.Count do
       begin
         var Current := (First+Vertex) mod Ring.Count;
-        if (Position = Above) and (Ring[Current].Y < Point.Y) then
+        CurrentPoint := Ring.Points[Current];
+        if CurrentPoint.Y = PreviousPoint.Y then
         begin
-          Position := Below;
-          if (Ring[Current].X > Point.X) and (Ring[Previous].X > Point.X) then Inc(Result) else
-          if (Ring[Current].X > Point.X) or (Ring[Previous].X > Point.X) then
-          if LineSegmentsIntersect(Point,TestPoint,Ring.Points[Previous],Ring.Points[Current]) then Inc(Result)
+          if CurrentPoint.Y = Point.Y then
+          if CurrentPoint.X < PreviousPoint.X then
+          begin
+           if (CurrentPoint.X <= Point.X) and (PreviousPoint.X >= Point.X) then Exit(1)
+          end else
+          begin
+            if (PreviousPoint.X <= Point.X) and (CurrentPoint.X >= Point.X) then Exit(1)
+          end;
         end else
-        if (Position = Below) and (Ring[Current].Y > Point.Y) then
         begin
-          Position := Above;
-          if (Ring[Current].X > Point.X) and (Ring[Previous].X > Point.X) then Inc(Result) else
-          if (Ring[Current].X > Point.X) or (Ring[Previous].X > Point.X) then
-          if LineSegmentsIntersect(Point,TestPoint,Ring.Points[Previous],Ring.Points[Current]) then Inc(Result)
+          if (Position = Above) and (CurrentPoint.Y < Point.Y) then
+          begin
+            Position := Below;
+            if Intersecting(Point,PreviousPoint,CurrentPoint) then Inc(Result)
+          end else
+          if (Position = Below) and (CurrentPoint.Y > Point.Y) then
+          begin
+            Position := Above;
+            if Intersecting(Point,PreviousPoint,CurrentPoint) then Inc(Result)
+          end;
         end;
         Previous := Current;
+        PreviousPoint := CurrentPoint;
       end;
     end;
   end;
 end;
 
 Class Function TPolyPolygon.PointInRing(const [ref] Point: TCoordinate;
-                                  const [ref] Ring: TShapePart): Boolean;
+                                        const [ref] Ring: TShapePart): Boolean;
 begin
   Result := ((NrIntersections(Point,Ring) mod 2) = 1);
 end;
@@ -301,6 +303,15 @@ end;
 Function TPolyPolygons.Count: Integer;
 begin
   Result := Length(FPolyPolygons);
+end;
+
+Function TPolyPolygons.Contains(const [ref] Point: TCoordinate): Boolean;
+var
+  Hole: Integer;
+begin
+  Result := false;
+  for var Polygon := 0 to Count-1 do
+  if FPolyPolygons[Polygon].PointLocation(Point,Hole) = plInterior then Exit(true);
 end;
 
 end.
