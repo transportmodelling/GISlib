@@ -241,7 +241,7 @@ begin
   for var Part := 0 to Count-1 do
   if Points[Part].Count > 2 then
   begin
-    FParts[Part] := Parts[Part];
+    FParts[Part] := Points[Part];
     FBoundingBox.Enclose(FParts[Part].FBoundingBox);
   end else
     raise Exception.Create('Invalid polygon');
