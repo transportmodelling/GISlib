@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes,Types,Graphics,Generics.Defaults,Generics.Collections,GIS,GIS.Shapes,
+  Classes,SysUtils,Types,Graphics,Generics.Defaults,Generics.Collections,GIS,GIS.Shapes,
   GIS.Shapes.Polygon,GIS.Shapes.Polygon.PolyLabel,GIS.Render.Shapes.PixelConv;
 
 Type
@@ -39,6 +39,8 @@ Type
       public
         Function Shape: TGISShape; virtual; abstract;
         Function BoundingBox: TCoordinateRect; virtual; abstract;
+        Procedure WriteLabelPositions(const Writer: TBinaryWriter); virtual;
+        Procedure ReadLabelPositions(const Reader: TBinaryReader); virtual;
         Procedure Draw(const ShapeLabel: String;
                        const Canvas: TCanvas;
                        const PixelConverter: TCustomPixelConverter); virtual; abstract;
@@ -65,18 +67,20 @@ Type
       TPolyPolygonsRenderer = Class(TShapeRenderer)
       private
         Type
-          TLabelCoord = record
+          TLabelPosition = record
             Calculated: Boolean;
-            Coordinate: TCoordinate;
+            Position: TCoordinate;
           end;
         Var
-          LabelCoords: array of TLabelCoord;
+          LabelPositions: array of TLabelPosition;
       public
         PolyPolygons: TPolyPolygons;
         ShapeBoundingBox: TCoordinateRect;
         Layer: TCustomShapesLayer;
         Function Shape: TGISShape; override;
         Function BoundingBox: TCoordinateRect; override;
+        Procedure WriteLabelPositions(const Writer: TBinaryWriter); override;
+        Procedure ReadLabelPositions(const Reader: TBinaryReader); override;
         Procedure Draw(const Outer: Integer;
                        const ShapeLabel: String;
                        const Canvas: TCanvas;
@@ -120,6 +124,8 @@ Type
     Procedure Add(Shape: TGISShape);
     Function ShapeCount(ShapeType: TShapeType): Integer;
     Procedure Read(const FileName: String; const FileFormat: TShapesFormat);
+    Procedure SaveLabelPositions(const FileName: String);
+    Procedure ReadLabelPositions(const FileName: String);
     Destructor Destroy; override;
   public
     Property Count: Integer read FCount;
@@ -134,6 +140,16 @@ implementation
 ////////////////////////////////////////////////////////////////////////////////
 
 {$R GIS.res}
+
+Procedure TCustomShapesLayer.TShapeRenderer.WriteLabelPositions(const Writer: TBinaryWriter);
+begin
+end;
+
+Procedure TCustomShapesLayer.TShapeRenderer.ReadLabelPositions(const Reader: TBinaryReader);
+begin
+end;
+
+////////////////////////////////////////////////////////////////////////////////
 
 Function TCustomShapesLayer.TPointsRenderer.Shape: TGISShape;
 begin
@@ -222,13 +238,42 @@ begin
    Result := ShapeBoundingBox;
 end;
 
+Procedure TCustomShapesLayer.TPolyPolygonsRenderer.WriteLabelPositions(const Writer: TBinaryWriter);
+Var
+  LabelPosition: TCoordinate;
+begin
+  for var Outer := 0 to PolyPolygons.Count-1 do
+  begin
+    // Calculate label positions
+    if not LabelPositions[Outer].Calculated then
+    begin
+      LabelPosition := TPolyLabel.PolyLabel(PolyPolygons[Outer],MaxPolyLabelIter);
+      LabelPositions[Outer].Calculated := true;
+      LabelPositions[Outer].Position := LabelPosition;
+    end;
+    // Write label position to file
+    Writer.Write(LabelPosition.X);
+    Writer.Write(LabelPosition.Y);
+  end;
+end;
+
+Procedure TCustomShapesLayer.TPolyPolygonsRenderer.ReadLabelPositions(const Reader: TBinaryReader);
+begin
+  for var Outer := 0 to PolyPolygons.Count-1 do
+  begin
+    LabelPositions[Outer].Calculated := true;
+    LabelPositions[Outer].Position.X := Reader.ReadDouble;
+    LabelPositions[Outer].Position.Y := Reader.ReadDouble;
+  end;
+end;
+
 Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const Outer: Integer;
                                                         const ShapeLabel: String;
                                                         const Canvas: TCanvas;
                                                         const HolesColor: TColor;
                                                         const PixelConverter: TCustomPixelConverter);
 Var
-  LabelCoord: TCoordinate;
+  LabelPosition: TCoordinate;
   Pixels: array of TPoint;
 begin
   var OuterStyle := Canvas.Brush.Style;
@@ -251,15 +296,15 @@ begin
     if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
     and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
     begin
-      if LabelCoords[Outer].Calculated then
-        LabelCoord := LabelCoords[Outer].Coordinate
+      if LabelPositions[Outer].Calculated then
+        LabelPosition := LabelPositions[Outer].Position
       else
         begin
-          LabelCoord := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
-          LabelCoords[Outer].Calculated := true;
-          LabelCoords[Outer].Coordinate := LabelCoord;
+          LabelPosition := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
+          LabelPositions[Outer].Calculated := true;
+          LabelPositions[Outer].Position := LabelPosition;
         end;
-      var LabelPixel := PixelConverter.CoordToPixel(LabelCoord);
+      var LabelPixel := PixelConverter.CoordToPixel(LabelPosition);
       var X := LabelPixel.X - (LabelSize.cx div 2);
       var Y := LabelPixel.Y - (LabelSize.cy div 2);
       Canvas.TextOut(X,Y,ShapeLabel);
@@ -463,7 +508,7 @@ begin
         Renderer.PolyPolygons := TPolyPolygons.Create(Shape);
         Renderer.ShapeBoundingBox := Shape.BoundingBox;
         Renderer.Layer := Self;
-        SetLength(Renderer.LabelCoords,Renderer.PolyPolygons.Count);
+        SetLength(Renderer.LabelPositions,Renderer.PolyPolygons.Count);
         ShapeRenderers[FCount] := Renderer;
       end;
   end;
@@ -485,6 +530,40 @@ begin
   try
     while Reader.ReadShape(Shape) do Add(Shape);
   finally
+    Reader.Free;
+  end;
+end;
+
+Procedure TShapesLayer.SaveLabelPositions(const FileName: String);
+Var
+  Stream: TStream;
+  Writer: TBinaryWriter;
+begin
+  Stream := nil;
+  Writer := nil;
+  try
+    Stream := TBufferedFileStream.Create(FileName,fmCreate or fmShareDenyWrite,4096);
+    Writer := TBinaryWriter.Create(Stream);
+    for var Shape := 0 to FCount-1 do ShapeRenderers[Shape].WriteLabelPositions(Writer);
+  finally
+    Stream.Free;
+    Writer.Free;
+  end;
+end;
+
+Procedure TShapesLayer.ReadLabelPositions(const FileName: String);
+Var
+  Stream: TStream;
+  Reader: TBinaryReader;
+begin
+  Stream := nil;
+  Reader := nil;
+  try
+    Stream := TBufferedFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite,4096);
+    Reader := TBinaryReader.Create(Stream);
+    for var Shape := 0 to FCount-1 do ShapeRenderers[Shape].ReadLabelPositions(Reader);
+  finally
+    Stream.Free;
     Reader.Free;
   end;
 end;
