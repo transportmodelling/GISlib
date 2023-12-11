@@ -97,9 +97,11 @@ Type
       FBoundingBox: TCoordinateRect;
     Function ShapeLabel(const Shape: Integer): String; virtual;
     Function ShapeRenderer(const Shape: Integer): TCustomShapesLayer.TShapeRenderer; virtual; abstract;
+    Function PaintShape(const Shape: Integer): Boolean; virtual;
     Procedure SetPaintStyle(const Shape: Integer; const Canvas: TCanvas); virtual;
   public
     Constructor Create(const TransparentColor: TColor);
+    Function PaintBoundingBox: TCoordinateRect;
     Procedure DrawLayer(const Canvas: TCanvas;
                         const PixelConverter: TCustomPixelConverter;
                         const Width,Height: Integer); overload;
@@ -307,6 +309,7 @@ begin
       var LabelPixel := PixelConverter.CoordToPixel(LabelPosition);
       var X := LabelPixel.X - (LabelSize.cx div 2);
       var Y := LabelPixel.Y - (LabelSize.cy div 2);
+      Canvas.Brush.Style := bsClear;
       Canvas.TextOut(X,Y,ShapeLabel);
     end;
     // Draw holes
@@ -342,8 +345,9 @@ begin
       PolygonBitmap.Canvas.Brush.Color := PolygonBitmap.TransparentColor;
       PolygonBitmap.Canvas.FillRect(Rect(0,0,PolygonBitmap.Width,PolygonBitmap.Height));
       // Draw poly polygon on polygon bitmap
-      PolygonBitmap.Canvas.Brush.Style := Canvas.Brush.Style;
-      PolygonBitmap.Canvas.Brush.Color := Canvas.Brush.Color;
+      PolygonBitmap.Canvas.Font := Canvas.Font;
+      PolygonBitmap.Canvas.Pen := Canvas.Pen;
+      PolygonBitmap.Canvas.Brush := Canvas.Brush;
       Draw(Outer,ShapeLabel,PolygonBitmap.Canvas,PolygonBitmap.TransparentColor,PixelConverter);
       // Draw polygon bitmap on canvas
       Canvas.Draw(0,0,PolygonBitmap);
@@ -414,8 +418,21 @@ begin
   Result := '';
 end;
 
+Function TCustomShapesLayer.PaintShape(const Shape: Integer): Boolean;
+begin
+  Result := true;
+end;
+
 Procedure TCustomShapesLayer.SetPaintStyle(const Shape: Integer; const Canvas: TCanvas);
 begin
+end;
+
+Function TCustomShapesLayer.PaintBoundingBox: TCoordinateRect;
+begin
+  Result.Clear;
+  for var Shape := 0 to FCount-1 do
+  if PaintShape(Shape) then
+  Result.Enclose(ShapeRenderer(Shape).BoundingBox);
 end;
 
 Procedure TCustomShapesLayer.DrawLayer(const Canvas: TCanvas;
@@ -427,6 +444,7 @@ begin
   PolygonBitmap.Canvas.Pen := Canvas.Pen;
   PolygonBitmap.Canvas.Brush := Canvas.Brush;
   for var Shape := 0 to FCount-1 do
+  if PaintShape(Shape) then
   begin
     var ShpRenderer := ShapeRenderer(Shape);
     if Viewport.IntersectsWith(ShpRenderer.BoundingBox) then

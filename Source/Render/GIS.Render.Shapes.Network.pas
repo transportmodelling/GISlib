@@ -37,7 +37,6 @@ Type
     Function GetLinks(Link: Integer): TNetworkLink; inline;
   strict protected
     Function ShapeRenderer(const Shape: Integer): TCustomShapesLayer.TShapeRenderer; override;
-    Procedure SetPaintStyle(const Link: Integer; const Canvas: TCanvas); override;
   strict protected
     Procedure SetNodesCapacity(Capacity: Integer); virtual;
     Procedure SetLinksCapacity(Capacity: Integer); virtual;
@@ -131,10 +130,6 @@ end;
 Function TNetworkLayer.LinkLabel(const Link: Integer): String;
 begin
   Result := '';
-end;
-
-Procedure TNetworkLayer.SetPaintStyle(const Link: Integer; const Canvas: TCanvas);
-begin
 end;
 
 Procedure TNetworkLayer.Clear;
