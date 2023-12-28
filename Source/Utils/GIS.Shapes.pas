@@ -68,16 +68,27 @@ Type
     Property Points[Part,Point: Integer]: TCoordinate read GetPoints; default;
   end;
 
-  TShapesReader = Class
+  TGISShapeProperties = TArray<TPair<String,Variant>>; // Array of name-value pairs
+
+  TGISShapePropertiesHelper = record helper for TGISShapeProperties
+  private
+    Function GetValueFromIndex(Index: Integer): Variant; inline;
+    Function GetValueFromName(Name: String): Variant; inline;
+  public
+    Property ValueFromIndex[Index: Integer]: Variant read GetValueFromIndex;
+    Property ValueFromName[Name: String]: Variant read GetValueFromName;
+  end;
+
+  TGISShapesReader = Class
   private
     FFileName: String;
   public
     Constructor Create(FileName: string); virtual;
     Function ReadShape(out Shape: TGISShape): Boolean; overload;
-    Function ReadShape(out Shape: TGISShape; out Properies: TArray<TPair<String,Variant>>): Boolean; overload; virtual; abstract;
+    Function ReadShape(out Shape: TGISShape; out Properies: TGISShapeProperties): Boolean; overload; virtual; abstract;
   end;
 
-  TShapesFormat = Class of TShapesReader;
+  TGISShapesFormat = Class of TGISShapesReader;
 
 ////////////////////////////////////////////////////////////////////////////////
 implementation
@@ -269,15 +280,29 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TShapesReader.Create(FileName: string);
+Function TGISShapePropertiesHelper.GetValueFromIndex(Index: Integer): Variant;
+begin
+  Result := Self[Index].Value;
+end;
+
+Function TGISShapePropertiesHelper.GetValueFromName(Name: String): Variant;
+begin
+  for var Prop := low(Self) to high(Self) do
+  if SameText(Name,Self[Prop].Key) then Exit(Self[Prop].Value);
+  raise Exception.Create('Property ' + Name + 'does not exist');
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TGISShapesReader.Create(FileName: string);
 begin
   inherited Create;
   FFileName := FileName;
 end;
 
-Function TShapesReader.ReadShape(out Shape: TGISShape): Boolean;
+Function TGISShapesReader.ReadShape(out Shape: TGISShape): Boolean;
 Var
-  Properties: TArray<TPair<String,Variant>>;
+  Properties: TGISShapeProperties;
 begin
   Result := ReadShape(Shape,Properties);
 end;

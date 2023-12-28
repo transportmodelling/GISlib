@@ -125,7 +125,7 @@ Type
     Procedure Clear;
     Procedure Add(Shape: TGISShape);
     Function ShapeCount(ShapeType: TShapeType): Integer;
-    Procedure Read(const FileName: String; const FileFormat: TShapesFormat);
+    Procedure Read(const FileName: String; const FileFormat: TGISShapesFormat);
     Procedure SaveLabelPositions(const FileName: String);
     Procedure ReadLabelPositions(const FileName: String);
     Destructor Destroy; override;
@@ -540,7 +540,7 @@ begin
   Result := FShapeCount[ShapeType];
 end;
 
-Procedure TShapesLayer.Read(const FileName: String; const FileFormat: TShapesFormat);
+Procedure TShapesLayer.Read(const FileName: String; const FileFormat: TGISShapesFormat);
 Var
   Shape: TGISShape;
 begin

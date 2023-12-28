@@ -15,7 +15,7 @@ Uses
   Classes,SysUtils,Generics.Collections,DBF,GIS,GIS.Shapes;
 
 Type
-  TESRIShapeFileReader = Class(TShapesReader)
+  TESRIShapeFileReader = Class(TGISShapesReader)
   private
     ShapesStream: TBufferedFileStream;
     ShapesReader: TBinaryReader;
@@ -26,7 +26,7 @@ Type
     Constructor Create(FileName: string); overload; override;
     Constructor Create(FileName: string; ReadProperties: Boolean); overload;
     Function IndexOf(const PropertyName: String; const MustExist: Boolean = false): Integer;
-    Function ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean; override;
+    Function ReadShape(out Shape: TGISShape; out Properties: TGISShapeProperties): Boolean; override;
     Destructor Destroy; override;
   end;
 
@@ -183,7 +183,7 @@ begin
   end;
 end;
 
-Function TESRIShapeFileReader.ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean;
+Function TESRIShapeFileReader.ReadShape(out Shape: TGISShape; out Properties: TGISShapeProperties): Boolean;
 begin
   if ShapesStream.Position < ShapesStream.Size then
   begin
