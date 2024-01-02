@@ -12,8 +12,9 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes,SysUtils,Types,Graphics,Generics.Defaults,Generics.Collections,GIS,GIS.Shapes,
-  GIS.Shapes.Polygon,GIS.Shapes.Polygon.PolyLabel,GIS.Render.Shapes.PixelConv;
+  Classes, SysUtils, Types, Graphics, Generics.Defaults, Generics.Collections,
+  GIS, GIS.Shapes, GIS.Shapes.Polygon, GIS.Shapes.Polygon.PolyLabel,
+  GIS.Render.PixelConv;
 
 Type
   TPointRenderStyle = (rsCircle,rsSquare,rsTriangleDown,rsTriangleUp,rsBitmap,
@@ -171,7 +172,7 @@ begin
   var Radius := Layer.FPointRenderSize div 2;
   for var Point := 0 to PointsCount-1 do
   begin
-    var Pixel := PixelConverter.CoordToPixel(Points[Point]);
+    var Pixel := PixelConverter.CoordToPixel(Points[Point]).Round;
     case Layer.FPointRenderStyle of
       rsCircle: Canvas.Ellipse(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius);
       rsSquare: Canvas.Rectangle(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius);
@@ -210,11 +211,11 @@ begin
   for var Part := 0 to Lines.Count-1 do
   begin
     var PointsCount := Lines.Parts[Part].Count;
-    var Pixel := PixelConverter.CoordToPixel(Lines[Part,0]);
+    var Pixel := PixelConverter.CoordToPixel(Lines[Part,0]).Round;
     Canvas.MoveTo(Pixel.X,Pixel.Y);
     for var Point := 1 to PointsCount-1 do
     begin
-      Pixel := PixelConverter.CoordToPixel(Lines[Part,Point]);
+      Pixel := PixelConverter.CoordToPixel(Lines[Part,Point]).Round;
       Canvas.LineTo(Pixel.X,Pixel.Y);
     end;
   end;
@@ -285,7 +286,7 @@ begin
   var OuterRing := PolyPolygon.OuterRing;
   SetLength(Pixels,OuterRing.Count);
   for var Point := 0 to OuterRing.Count-1 do
-  Pixels[Point] := PixelConverter.CoordToPixel(OuterRing[Point]);
+  Pixels[Point] := PixelConverter.CoordToPixel(OuterRing[Point]).Round;
   // Draw outer ring
   var PixelBoundingBox := TRect.Union(Pixels);
   if (PixelBoundingBox.Width > 0) and (PixelBoundingBox.Height > 0) then
@@ -306,7 +307,7 @@ begin
           LabelPositions[Outer].Calculated := true;
           LabelPositions[Outer].Position := LabelPosition;
         end;
-      var LabelPixel := PixelConverter.CoordToPixel(LabelPosition);
+      var LabelPixel := PixelConverter.CoordToPixel(LabelPosition).Round;
       var X := LabelPixel.X - (LabelSize.cx div 2);
       var Y := LabelPixel.Y - (LabelSize.cy div 2);
       Canvas.Brush.Style := bsClear;
@@ -319,7 +320,7 @@ begin
       var Hole := PolyPolygon.Holes[Inner];
       SetLength(Pixels,Hole.Count);
       for var Point := 0 to Hole.Count-1 do
-      Pixels[Point] := PixelConverter.CoordToPixel(Hole[Point]);
+      Pixels[Point] := PixelConverter.CoordToPixel(Hole[Point]).Round;
       // Draw hole
       Canvas.Brush.Style := bsSolid;
       Canvas.Brush.Color := HolesColor;
@@ -439,7 +440,7 @@ Procedure TCustomShapesLayer.DrawLayer(const Canvas: TCanvas;
                                        const PixelConverter: TCustomPixelConverter;
                                        const Width,Height: Integer);
 begin
-  Viewport := PixelConverter.PixelToCoord(Width,Height);
+  Viewport := PixelConverter.GetViewport;
   PolygonBitmap.SetSize(Width,Height);
   PolygonBitmap.Canvas.Pen := Canvas.Pen;
   PolygonBitmap.Canvas.Brush := Canvas.Brush;

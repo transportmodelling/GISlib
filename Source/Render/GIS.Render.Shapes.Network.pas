@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Graphics,GIS,GIS.Shapes,GIS.Render.Shapes,GIS.Render.Shapes.PixelConv;
+  Graphics, GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.PixelConv;
 
 Type
   TNetworkLink = record
