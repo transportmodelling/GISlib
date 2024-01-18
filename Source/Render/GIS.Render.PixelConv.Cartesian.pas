@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  SysUtils, Types, GIS, GIS.Render.PixelConv;
+  SysUtils, Classes, Types, GIS, GIS.Render.PixelConv;
 
 Type
   TCartesianPixelConverter = Class(TCustomPixelConverter)
@@ -24,6 +24,9 @@ Type
       FCoordUnitsPerPixel: Float64;
       FViewport: TCoordinateRect;
     Procedure SetMargin(Margin: Float32);
+  strict protected
+    Procedure WriteState(const Writer: TBinaryWriter); override;
+    Procedure ReadState(const Reader: TBinaryReader); override;
   public
     // Convert between pixels and world coordinates
     Function CoordToPixel(const Coord: TCoordinate): TPointF; override;
@@ -59,6 +62,23 @@ begin
     if FInitialized then Initialize(FViewport,FPixelWidth,FPixelHeight);
   end;
 end;
+
+Procedure TCartesianPixelConverter.WriteState(const Writer: TBinaryWriter);
+begin
+  Writer.Write(FViewport.Left);
+  Writer.Write(FViewport.Top);
+  Writer.Write(FCoordUnitsPerPixel);
+end;
+
+Procedure TCartesianPixelConverter.ReadState(const Reader: TBinaryReader);
+begin
+  FViewport.Left := Reader.ReadDouble;
+  FViewport.Top := Reader.ReadDouble;
+  FCoordUnitsPerPixel := Reader.ReadDouble;
+  FViewport.Right := FViewport.Left + PixelWidth*FCoordUnitsPerPixel;
+  FViewport.Bottom := FViewport.Top - PixelHeight*FCoordUnitsPerPixel;
+end;
+
 
 Function TCartesianPixelConverter.CoordToPixel(const Coord: TCoordinate): TPointF;
 begin
@@ -125,6 +145,7 @@ begin
     FViewport.Bottom := BoundingBox.Bottom-DeltaHeight/2;
   end;
   FCoordUnitsPerPixel := FViewport.Width/PixelWidth;
+  Changed;
 end;
 
 Procedure TCartesianPixelConverter.ZoomIn(const Pixel: TPointF);
@@ -139,6 +160,7 @@ begin
     FViewport.Top := Center.Y + Height/2;
     FViewport.Bottom := Center.Y - Height/2;
     FCoordUnitsPerPixel := FCoordUnitsPerPixel/ZoomFactor;
+    Changed;
   end else
     raise Exception.Create('Pixel converter not initialized');
 end;
@@ -163,6 +185,7 @@ begin
     FViewport.Top := Center.Y + Height/2;
     FViewport.Bottom := Center.Y - Height/2;
     FCoordUnitsPerPixel := ZoomFactor*FCoordUnitsPerPixel;
+    Changed;
   end else
     raise Exception.Create('Pixel converter not initialized');
 end;
@@ -175,6 +198,7 @@ begin
     FViewport.Right := FViewport.Right - DeltaXPixel*FCoordUnitsPerPixel;
     FViewport.Top := FViewport.Top + DeltaYPixel*FCoordUnitsPerPixel;
     FViewport.Bottom := FViewport.Bottom + DeltaYPixel*FCoordUnitsPerPixel;
+    Changed;
   end else
     raise Exception.Create('Pixel converter not initialized');
 end;
