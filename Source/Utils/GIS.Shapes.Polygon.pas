@@ -18,6 +18,7 @@ Type
   TPointLocation = (plInterior,plExterior,plHole);
 
   TPolyPolygon = record
+  // Single outer ring, (potentially) with holes
   private
     Class Function Intersecting(const Point,A,B: TCoordinate): Boolean; static;
     Class Function NrIntersections(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Integer; static;
@@ -39,6 +40,7 @@ Type
   end;
 
   TPolyPolygons = record
+  // Shape consisting of one or more outer rings, (potentially) with holes
   private
     FPolyPolygons: array of TPolyPolygon;
     Function GetPolyPolygons(Polypolygon: Integer): TPolyPolygon;
@@ -49,6 +51,20 @@ Type
     Function Contains(const [ref] Point: TCoordinate): Boolean;
   public
     Property PolyPolygons[PolyPolygon: Integer]: TPolyPolygon read GetPolyPolygons; default;
+  end;
+
+  TPolyPolygonsShapes = record
+  // Multiple shapes, each consisting of one or more outer rings, (potentially) with holes
+  private
+    FFileName: String;
+    Shapes: array of TPolyPolygons;
+  public
+    Constructor Create(const FileName: String; const FileFormat: TGISShapesFormat);
+    Function Count: Integer;
+    Function GetShape(const X,Y: Float64; Interior: Boolean): Integer; overload;
+    Function GetShape(const Coordinate: TCoordinate; Interior: Boolean): Integer; overload;
+  public
+    Property FileName: String read FFileName;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -342,6 +358,65 @@ begin
   Result := false;
   for var Polygon := 0 to Count-1 do
   if FPolyPolygons[Polygon].PointLocation(Point,Hole) = plInterior then Exit(true);
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TPolyPolygonsShapes.Create(const FileName: String; const FileFormat: TGISShapesFormat);
+Var
+  Shape: TGISShape;
+begin
+  var Reader := FileFormat.Create(FileName);
+  try
+    var NShapes := 0;
+    while Reader.ReadShape(Shape) do
+    if Shape.ShapeType = stPolygon then
+    begin
+      if NShapes = Length(Shapes) then SetLength(Shapes,NShapes+64);
+      Shapes[NShapes] := TPolyPolygons.Create(Shape);
+      Inc(NShapes);
+    end else
+      raise Exception.Create('Invalid shape type');
+    SetLength(Shapes,NShapes);
+  finally
+    Reader.Free;
+  end;
+end;
+
+Function TPolyPolygonsShapes.Count: Integer;
+begin
+  Result := Length(Shapes);
+end;
+
+Function TPolyPolygonsShapes.GetShape(const X,Y: Float64; Interior: Boolean): Integer;
+begin
+  Result := GetShape(TCoordinate.Create(X,Y),Interior);
+end;
+
+Function TPolyPolygonsShapes.GetShape(const Coordinate: TCoordinate; Interior: Boolean): Integer;
+begin
+  Result := -1;
+  // Find shape that contains coordinate
+  for var Shape := low(Shapes) to high(Shapes) do
+  if Shapes[Shape].Contains(Coordinate) then
+  begin
+    Result := Shape;
+    Break;
+  end;
+  // If not in interior of a shape, find closest
+  if (Result < 0) and (not Interior) then
+  begin
+    var Closest := Infinity;
+    for var Shape := low(Shapes) to high(Shapes) do
+    begin
+      var Dist := Shapes[Shape].Distance(Coordinate);
+      if Dist < Closest then
+      begin
+        Closest := Dist;
+        Result := Shape;
+      end;
+    end;
+  end;
 end;
 
 end.
