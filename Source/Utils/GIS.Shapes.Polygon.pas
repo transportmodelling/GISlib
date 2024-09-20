@@ -44,6 +44,7 @@ Type
   private
     FPolyPolygons: array of TPolyPolygon;
     Function GetPolyPolygons(Polypolygon: Integer): TPolyPolygon;
+    Function SqrVerticesDistance(Polygon: TShapePart; Point: TCoordinate): Float64;
   public
     Constructor Create(const [ref] PolyPolygons: TGISShape);
     Function Count: Integer;
@@ -291,8 +292,21 @@ begin
           var EnclosingPolygonBoundingBox := PolyPolygons.Parts[EnclosingPolygonIndex].BoundingBox;
           if EnclosingPolygonBoundingBox.Contains(PolygonBoundingBox) then
           begin
-            var TestPoint := PolyPolygons.Parts[PolygonIndex].Points[0];
-            if TPolyPolygon.PointInRing(TestPoint,PolyPolygons.Parts[EnclosingPolygonIndex]) then
+            // Find most distict test point
+            var TestCoordinate := PolyPolygons.Parts[PolygonIndex].Points[0];
+            var SqrTestDistance := SqrVerticesDistance(PolyPolygons.Parts[EnclosingPolygonIndex],TestCoordinate);
+            for var Point := 1 to PolyPolygons.Parts[PolygonIndex].Count-1 do
+            begin
+              var PointCoordinate := PolyPolygons.Parts[PolygonIndex].Points[Point];
+              var SqrPointDistance := SqrVerticesDistance(PolyPolygons.Parts[EnclosingPolygonIndex],PointCoordinate);
+              if SqrPointDistance > SqrTestDistance then
+              begin
+                SqrTestDistance := SqrPointDistance;
+                TestCoordinate := PointCoordinate;
+              end;
+            end;
+            // Test whether test point in enclosing polygon
+            if TPolyPolygon.PointInRing(TestCoordinate,PolyPolygons.Parts[EnclosingPolygonIndex]) then
             begin
               EnclosingPolygonsCount[Polygon] := EnclosingPolygonsCount[PotentialEnclosingPolygon]+1;
               LastEnclosingPolygon[Polygon] := PotentialEnclosingPolygon;
@@ -333,6 +347,16 @@ end;
 Function TPolyPolygons.GetPolyPolygons(Polypolygon: Integer): TPolyPolygon;
 begin
   Result := FPolyPolygons[PolyPolygon];
+end;
+
+Function TPolyPolygons.SqrVerticesDistance(Polygon: TShapePart; Point: TCoordinate): Float64;
+begin
+  Result := Infinity;
+  for var Vertex := 0 to Polygon.Count-1 do
+  begin
+    var SqrDistance := TCoordinate.SqrDistance(Point,Polygon[Vertex]);
+    if SqrDistance < Result then Result := SqrDistance;
+  end;
 end;
 
 Function TPolyPolygons.Count: Integer;
