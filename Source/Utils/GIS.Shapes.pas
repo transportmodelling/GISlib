@@ -81,11 +81,13 @@ Type
 
   TGISShapesReader = Class
   private
-    FFileName: String;
+    FFileName: TFileName;
   public
-    Constructor Create(FileName: string); virtual;
+    Constructor Create(const FileName: TFileName); virtual;
     Function ReadShape(out Shape: TGISShape): Boolean; overload;
     Function ReadShape(out Shape: TGISShape; out Properies: TGISShapeProperties): Boolean; overload; virtual; abstract;
+  public
+    Property FileName: TFileName read FFileName;
   end;
 
   TGISShapesFormat = Class of TGISShapesReader;
@@ -294,7 +296,7 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TGISShapesReader.Create(FileName: string);
+Constructor TGISShapesReader.Create(const FileName: TFileName);
 begin
   inherited Create;
   FFileName := FileName;

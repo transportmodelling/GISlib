@@ -23,7 +23,7 @@ Type
     Function ReadPoints: TArray<TCoordinate>;
     Function ReadParts: TMultiPoints;
   public
-    Constructor Create(FileName: string); overload; override;
+    Constructor Create(const FileName: TFileName); overload; override;
     Constructor Create(FileName: string; ReadProperties: Boolean); overload;
     Function IndexOf(const PropertyName: String; const MustExist: Boolean = false): Integer;
     Function ReadShape(out Shape: TGISShape; out Properties: TGISShapeProperties): Boolean; override;
@@ -102,7 +102,7 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TESRIShapeFileReader.Create(FileName: string);
+Constructor TESRIShapeFileReader.Create(const FileName: TFileName);
 begin
   Create(FileName,true);
 end;
