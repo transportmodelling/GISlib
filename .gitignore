@@ -39,6 +39,8 @@
 *.rsm
 *.tds
 *.dcu
+*.exe
+*.otares
 *.lib
 *.a
 *.o
