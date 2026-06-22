@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes,SysUtils,Generics.Collections,DBF,GIS,GIS.Shapes;
+  Classes, SysUtils, Generics.Collections, DBF, GIS, GIS.Shapes;
 
 Type
   TESRIShapeFileReader = Class(TGISShapesReader)

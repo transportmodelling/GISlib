@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  SysUtils, Classes, Rtti, Generics.Collections, ObjArr, JSON, JSON.Types, JSON.Writers,
+  SysUtils, Classes, Rtti, Generics.Collections, JSON, JSON.Types, JSON.Writers, JSON.ObjArr,
   GIS, GIS.Shapes;
 
 Type
