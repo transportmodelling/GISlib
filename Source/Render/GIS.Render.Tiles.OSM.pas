@@ -26,7 +26,7 @@ implementation
 
 Function TOpenStreetMapLayer.GetTile(Level,Xindex,Yindex: Integer): TGraphic;
 begin
-  Result := DownloadTile<TPngImage>('http://tile.openstreetmap.org/' +
+  Result := DownloadTile<TPngImage>('https://tile.openstreetmap.org/' +
                          Level.ToString + '/' +
                          Xindex.ToString + '/'+
                          YIndex.ToString + '.png');

@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  SysUtils, Classes, Graphics, Generics.Collections, IdHTTP, GIS.Render.PixelConv.Mercator;
+  SysUtils, Classes, Graphics, Net.HttpClient, Generics.Collections, GIS.Render.PixelConv.Mercator;
 
 Type
   TCustomTilesLayer = Class
@@ -40,7 +40,7 @@ Type
     Const
       MaxZoomLevel = 23;
     Var
-      HTTP: TIdHTTP;
+      HTTP: THTTPClient;
       TilesCache: array[1..MaxZoomLevel] of TTilesCache;
   strict protected
     Function DownloadTile<T: TGraphic,Constructor>(URL: String): T;
@@ -122,7 +122,7 @@ Function TCustomTilesLayer.DownloadTile<T>(URL: String): T;
 begin
   var Stream := TMemoryStream.Create;
   try
-    if HTTP = nil then HTTP := TIdHTTP.Create(nil);
+    if HTTP = nil then HTTP := THTTPClient.Create;
     HTTP.Get(URL,Stream);
     Stream.Position := 0;
     Result := T.Create;
