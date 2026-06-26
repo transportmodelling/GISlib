@@ -53,6 +53,10 @@ Type
     Function TopTile: Integer;
     Function TopTilePosition: Integer;
     Function VertTilesCount: Integer;
+    // Sync Mercator state from another converter (same view, different CoordinateConverter)
+    Procedure SyncFrom(const Source: TWebMercatorPixelConverter);
+    // Update pixel dimensions without changing zoom/pan position
+    Procedure Resize(const PixelWidth,PixelHeight: Float32);
     // Get viewport
     Function GetViewport: TCoordinateRect; override;
   public
@@ -120,8 +124,8 @@ Function TWebMercatorPixelConverter.PixelToGeodeticCoord(const Pixel: TPointF): 
 begin
   if FInitialized then
   begin
-    var Xmercator := (MercatorMapLeft+Pixel.X)/MercatormapSize;
-    var Ymercator := (MercatorMapTop+Pixel.Y)/MercatorMapSize;
+    var Xmercator := EnsureRange((MercatorMapLeft+Pixel.X)/MercatormapSize, 0, 1);
+    var Ymercator := EnsureRange((MercatorMapTop+Pixel.Y)/MercatorMapSize, 0, 1);
     Result.Longitude := WebMercatorProjection.XCoordToLongitude(Xmercator);
     Result.Latitude := WebMercatorProjection.YCoordToLatitude(Ymercator);
   end else
@@ -279,6 +283,26 @@ end;
 Function TWebMercatorPixelConverter.VertTilesCount: Integer;
 begin
   Result := Ceil((FPixelHeight-TopTilePosition)/FTileSize);
+end;
+
+Procedure TWebMercatorPixelConverter.SyncFrom(const Source: TWebMercatorPixelConverter);
+begin
+  SetZoomLevel(Source.FZoomLevel);
+  MercatorMapLeft := Source.MercatorMapLeft;
+  MercatorMapTop  := Source.MercatorMapTop;
+  FPixelWidth     := Source.FPixelWidth;
+  FPixelHeight    := Source.FPixelHeight;
+  FInitialized    := Source.FInitialized;
+end;
+
+Procedure TWebMercatorPixelConverter.Resize(const PixelWidth,PixelHeight: Float32);
+begin
+  if FInitialized then
+  begin
+    FPixelWidth  := PixelWidth;
+    FPixelHeight := PixelHeight;
+    Changed;
+  end;
 end;
 
 Function TWebMercatorPixelConverter.GetViewport: TCoordinateRect;
