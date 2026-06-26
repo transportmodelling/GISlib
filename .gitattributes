@@ -1,3 +1,4 @@
 *.shp  binary
 *.dbf  binary
 *.shx  binary
+*.gpkg binary
