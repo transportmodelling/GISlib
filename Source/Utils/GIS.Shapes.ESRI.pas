@@ -443,16 +443,17 @@ end;
 
 Procedure TESRIPolygonShapeFileWriter.Write(Polygons: TMultiPoints; const Properties: array of Variant);
 begin
-  // Close polygons
+  // Close polygons if not already closed; reject rings with fewer than 2 points
   for var Part := low(Polygons) to high(Polygons) do
   begin
     var NPoints := Length(Polygons[Part]);
     if NPoints > 1 then
+    begin
       if (Polygons[Part,0].X <> Polygons[Part,NPoints-1].X)
       or (Polygons[Part,0].Y <> Polygons[Part,NPoints-1].Y) then
-      Polygons[Part] := Polygons[Part] + [Polygons[Part,0]]
-    else
-      raise Exception.Create('Invalid polygon');
+      Polygons[Part] := Polygons[Part] + [Polygons[Part,0]];
+    end else
+      raise Exception.Create('Invalid polygon')
   end;
   // Write polygons
   WriteMultiPoints(Polygons);
