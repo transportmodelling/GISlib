@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  SysUtils, Classes, Graphics, Net.HttpClient, Generics.Collections, GIS.Render.PixelConv.Mercator;
+  SysUtils, Classes, Graphics, Math, Net.HttpClient, Generics.Collections, GIS.Render.PixelConv.Mercator;
 
 Type
   TCustomTilesLayer = Class
@@ -135,15 +135,18 @@ end;
 Procedure TCustomTilesLayer.DrawLayer(const Canvas: TCanvas;
                                       const PixelConverter: TWebMercatorPixelConverter);
 begin
-  var LeftTile := PixelConverter.LeftTile;
-  var TopTile := PixelConverter.TopTile;
-  var HorizTilesCount := PixelConverter.HorizTilesCount;
-  var VertTilesCount := PixelConverter.VertTilesCount;
-  var Top := PixelConverter.TopTilePosition;
-  for var Ytile := TopTile to TopTile+VertTilesCount-1 do
+  var MaxTile   := (1 shl PixelConverter.ZoomLevel) - 1;
+  var LeftTile  := PixelConverter.LeftTile;
+  var TopTile   := PixelConverter.TopTile;
+  var FirstX    := Max(0, LeftTile);
+  var LastX     := Min(MaxTile, LeftTile + PixelConverter.HorizTilesCount - 1);
+  var FirstY    := Max(0, TopTile);
+  var LastY     := Min(MaxTile, TopTile + PixelConverter.VertTilesCount - 1);
+  var Top := PixelConverter.TopTilePosition + (FirstY - TopTile) * PixelConverter.TileSize;
+  for var Ytile := FirstY to LastY do
   begin
-    var Left := PixelConverter.LeftTilePosition;
-    for var Xtile := LeftTile to LeftTile+HorizTilesCount-1 do
+    var Left := PixelConverter.LeftTilePosition + (FirstX - LeftTile) * PixelConverter.TileSize;
+    for var Xtile := FirstX to LastX do
     begin
       var Tile := TilesCache[PixelConverter.ZoomLevel].GetCachedTile(Xtile,Ytile);
       if Tile = nil then Tile := GetTile(PixelConverter.ZoomLevel,Xtile,Ytile);
