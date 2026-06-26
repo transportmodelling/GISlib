@@ -1,4 +1,4 @@
-unit GIS.Shapes.GeoJSON;
+﻿unit GIS.Shapes.GeoJSON;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -56,6 +56,10 @@ Type
     Procedure WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: array of TPair<String,TValue>);
     Procedure WriteLineString(LineString: TMultiPoint; const Properties: array of TPair<String,TValue>);
     Procedure WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: array of TPair<String,TValue>);
+    // Writes a polygon; rings are closed automatically if first ≠ last point.
+    Procedure WritePolygon(const Parts: TMultiPoints; const Properties: array of TPair<String,TValue>);
+    // Convenience: writes any TGISShape with empty properties.
+    Procedure WriteShape(const Shape: TGISShape);
     Destructor Destroy; override;
   end;
 
@@ -363,6 +367,52 @@ begin
   WriteStartFeature('MultiLineString');
   WriteCoordinateValues(MultiLineString);
   WriteEndFeature(Properties);
+end;
+
+Procedure TGeoJSONWriter.WritePolygon(const Parts: TMultiPoints; const Properties: array of TPair<String,TValue>);
+var
+  ClosedParts: TMultiPoints;
+begin
+  // Close any open rings before writing (GeoJSON requires first point = last point)
+  SetLength(ClosedParts, Length(Parts));
+  for var Ring := low(Parts) to high(Parts) do
+  begin
+    ClosedParts[Ring] := Parts[Ring];
+    // Close ring
+    var NClosedParts := Length(ClosedParts[Ring]);
+    if (NClosedParts > 0) and
+       ((ClosedParts[Ring][0].X <> ClosedParts[Ring][NClosedParts-1].X) or
+        (ClosedParts[Ring][0].Y <> ClosedParts[Ring][NClosedParts-1].Y)) then
+      ClosedParts[Ring] := ClosedParts[Ring] + [ClosedParts[Ring][0]];
+  end;
+  WriteStartFeature('Polygon');
+  WriteCoordinateValues(ClosedParts);
+  WriteEndFeature(Properties);
+end;
+
+Procedure TGeoJSONWriter.WriteShape(const Shape: TGISShape);
+var
+  Parts: TMultiPoints;
+begin
+  case Shape.ShapeType of
+    stPoint:
+      WritePoint(Shape[0,0],[]);
+    stLine:
+      begin
+        SetLength(Parts,Shape.Count);
+        for var Part := 0 to Shape.Count - 1 do Parts[Part] := Shape.Parts[Part].AsMultiPoint;
+        if Shape.Count = 1 then
+          WriteLineString(Parts[0],[])
+        else
+          WriteMultiLineString(Parts,[]);
+      end;
+    stPolygon:
+      begin
+        SetLength(Parts,Shape.Count);
+        for var Part := 0 to Shape.Count - 1 do Parts[Part] := Shape.Parts[Part].AsMultiPoint;
+        WritePolygon(Parts,[]);
+      end;
+  end;
 end;
 
 Destructor TGeoJSONWriter.Destroy;
