@@ -22,6 +22,9 @@ Type
     Function MetersPerUnit: Float64; override;
     Function CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate; override;
     Function GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate; override;
+    Function SRID: Integer; override;
+    Function SRSName: String; override;
+    Function SRSDefinition: String; override;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,6 +47,24 @@ Function TWgs84CoordinateConverter.GeodeticCoordToCoord(GeodeticCoord: TGeodetic
 begin
   Result.X := GeodeticCoord.Longitude;
   Result.Y := GeodeticCoord.Latitude;
+end;
+
+Function TWgs84CoordinateConverter.SRID: Integer;
+begin
+  Result := 4326;
+end;
+
+Function TWgs84CoordinateConverter.SRSName: String;
+begin
+  Result := 'WGS 84';
+end;
+
+Function TWgs84CoordinateConverter.SRSDefinition: String;
+begin
+  Result :=
+    'GEOGCS["WGS 84",DATUM["WGS_1984",' +
+    'SPHEROID["WGS 84",6378137,298.257223563]],' +
+    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]';
 end;
 
 end.

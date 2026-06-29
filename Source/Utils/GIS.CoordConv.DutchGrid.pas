@@ -36,6 +36,9 @@ Type
     Function MetersPerUnit: Float64; override;
     Function CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate; override;
     Function GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate; override;
+    Function SRID: Integer; override;
+    Function SRSName: String; override;
+    Function SRSDefinition: String; override;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,6 +118,32 @@ begin
   r := 2*k*bigr*tpsihalf;
   Result.X := x0 + r*sa;
   Result.Y := y0 + r*ca;
+end;
+
+Function TDutchGridCoordinateConverter.SRID: Integer;
+begin
+  Result := 28992;
+end;
+
+Function TDutchGridCoordinateConverter.SRSName: String;
+begin
+  Result := 'Amersfoort / RD New';
+end;
+
+Function TDutchGridCoordinateConverter.SRSDefinition: String;
+begin
+  Result :=
+    'PROJCS["Amersfoort / RD New",' +
+    'GEOGCS["Amersfoort",DATUM["Amersfoort",' +
+    'SPHEROID["Bessel 1841",6377397.155,299.1528128]],' +
+    'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],' +
+    'PROJECTION["Oblique_Stereographic"],' +
+    'PARAMETER["latitude_of_origin",52.1551744],' +
+    'PARAMETER["central_meridian",5.38720621],' +
+    'PARAMETER["scale_factor",0.9999079],' +
+    'PARAMETER["false_easting",155000],' +
+    'PARAMETER["false_northing",463000],' +
+    'UNIT["metre",1]]';
 end;
 
 end.
