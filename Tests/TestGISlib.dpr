@@ -22,6 +22,7 @@ uses
   FireDAC.ConsoleUI.Wait,   // console wait-cursor (replaces VCLUI.Wait)
   FireDAC.Comp.Client,
   FireDAC.Phys.SQLite,
+  FireDAC.Phys.SQLiteWrapper.Stat,  // statically link SQLite - self-contained exe, no sqlite3.dll needed
   Test.Geometry   in 'Test.Geometry.pas',
   Test.Mercator   in 'Test.Mercator.pas',
   Test.CoordConv  in 'Test.CoordConv.pas',
@@ -37,7 +38,7 @@ begin
     try
       // Initialization
       TDUnitX.CheckCommandLine;
-      TDUnitX.Options.XMLOutputFile := '.\TestUtils.xml';
+      TDUnitX.Options.XMLOutputFile := '.\TestGISlib.xml';
       ReportMemoryLeaksOnShutdown := True;
       FireDACManager.SilentMode := True;
       // Create the test Runner

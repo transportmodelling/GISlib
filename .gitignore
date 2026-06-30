@@ -54,7 +54,6 @@
 *Resource.rc
 
 # Delphi local files (user-specific info)
-*.dproj
 *.local
 *.identcache
 *.projdata
