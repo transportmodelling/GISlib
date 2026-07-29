@@ -89,15 +89,14 @@ Const
   PolygonShape = 5;
   MultiPointShape = 8;
 
-Function Swop(AInt: Integer): Integer;
-Var
-  B1,B2,B3,B4: Byte;
+Function SwapBytes(AInt: Integer): Integer;
+// Reverses the byte order, converting between the big-endian integers of
+// the shape file format and the native little-endian integers. Unsigned
+// bit operations keep the function free of traps in overflow checked builds.
 begin
-  B1 := AInt mod 256;
-  B2 := (AInt div 256) mod 256;
-  B3 := (AInt div 65536) mod 256;
-  B4 := (AInt div 16777216) mod 256;
-  Result := B4+B3*256+B2*65536+B1*16777216;
+  var Bytes := Cardinal(AInt);
+  Result := Integer((Bytes shr 24) or ((Bytes shr 8) and $0000FF00) or
+                    ((Bytes shl 8) and $00FF0000) or (Bytes shl 24));
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,7 +114,7 @@ begin
   ShapesStream := TBufferedFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
   ShapesReader := TBinaryReader.Create(ShapesStream);
   var FileCode := ShapesReader.ReadInt32;
-  if Swop(FileCode) = ShapeFileCode then
+  if SwapBytes(FileCode) = ShapeFileCode then
     for var Skip := 1 to 24 do ShapesReader.ReadInt32
   else
     raise exception.Create('Invalid File Code in Shape file header');
@@ -252,7 +251,7 @@ Const
   Unused: Integer = 0;
   MZCoord: Float64 = 0.0;
 begin
-  Writer.Write(Swop(ShapeFileCode));
+  Writer.Write(SwapBytes(ShapeFileCode));
   for var Cnt := 1 to 6 do Writer.Write(Unused);
   Writer.Write(Version);
   Writer.Write(ShapeType);
@@ -283,11 +282,11 @@ begin
   BoundingBox.Enclose(ShapeBoundingBox);
   // Write index file
   var ContentLength: Int32 := 22+2*NParts+8*NPoints;
-  IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
-  IndexWriter.Write(Swop(ContentLength));
+  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(SwapBytes(ContentLength));
   // Write shape file
-  ShapesWriter.Write(Swop(Count));
-  ShapesWriter.Write(Swop(ContentLength));
+  ShapesWriter.Write(SwapBytes(Count));
+  ShapesWriter.Write(SwapBytes(ContentLength));
   ShapesWriter.Write(ShapeType);
   ShapesWriter.Write(ShapeBoundingBox.Left);
   ShapesWriter.Write(ShapeBoundingBox.Bottom);
@@ -309,7 +308,7 @@ begin
   // Update file size
   var FileSize: Int32 := Writer.BaseStream.Size div 2;
   Writer.BaseStream.Position := 24;
-  Writer.Write(Swop(FileSize));
+  Writer.Write(SwapBytes(FileSize));
   // Update bounding box
   Writer.BaseStream.Position := 36;
   Writer.Write(BoundingBox.Left);
@@ -325,7 +324,7 @@ begin
   if DBFWriter <> nil then
     DBFWriter.AppendRecord(Properties)
   else
-    if Length(Properties) > 0 then raise Exception.Create('Invalid number of propertries');
+    if Length(Properties) > 0 then raise Exception.Create('Invalid number of properties');
 end;
 
 Destructor TESRIShapeFileWriter.Destroy;
@@ -355,11 +354,11 @@ begin
   Inc(Count);
   BoundingBox.Enclose(Point);
   // Write index file
-  IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
-  IndexWriter.Write(Swop(ContentLength));
+  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(SwapBytes(ContentLength));
   // Write shape file
-  ShapesWriter.Write(Swop(Count));
-  ShapesWriter.Write(Swop(ContentLength));
+  ShapesWriter.Write(SwapBytes(Count));
+  ShapesWriter.Write(SwapBytes(ContentLength));
   ShapesWriter.Write(ShapeType);
   ShapesWriter.Write(Point.X);
   ShapesWriter.Write(Point.Y);
@@ -388,11 +387,11 @@ begin
   for var Point := 0 to NPoints-1 do ShapeBoundingBox.Enclose(MultiPoint[Point]);
   BoundingBox.Enclose(ShapeBoundingBox);
   // Write index file
-  IndexWriter.Write(Swop(ShapesWriter.BaseStream.Position div 2));
-  IndexWriter.Write(Swop(ContentLength));
+  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(SwapBytes(ContentLength));
   // Write shape file
-  ShapesWriter.Write(Swop(Count));
-  ShapesWriter.Write(Swop(ContentLength));
+  ShapesWriter.Write(SwapBytes(Count));
+  ShapesWriter.Write(SwapBytes(ContentLength));
   ShapesWriter.Write(ShapeType);
   ShapesWriter.Write(ShapeBoundingBox.Left);
   ShapesWriter.Write(ShapeBoundingBox.Bottom);

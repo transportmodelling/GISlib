@@ -37,10 +37,12 @@ type
   private
     function TempBase: String;
     procedure DeleteTempFiles;
+    function BigEndianHeaderField(const FileName: String): Integer;
   public
     [Test] procedure WritePolygon_RoundTrip;
     [Test] procedure WriteMultiplePolygons_CountMatches;
     [Test] procedure WriteLineString_RoundTrip;
+    [Test] procedure FileHeader_SizeFields_MatchFileSizes;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -232,6 +234,15 @@ begin
     if FileExists(TempBase + Ext) then DeleteFile(TempBase + Ext);
 end;
 
+function TESRIWriterTests.BigEndianHeaderField(const FileName: String): Integer;
+// Returns the big-endian file size field (in 16-bit words) at offset 24 of
+// a shape or index file header
+begin
+  var Bytes := TFile.ReadAllBytes(FileName);
+  Result := (Integer(Bytes[24]) shl 24) + (Integer(Bytes[25]) shl 16) +
+            (Integer(Bytes[26]) shl 8) + Integer(Bytes[27]);
+end;
+
 procedure TESRIWriterTests.WritePolygon_RoundTrip;
 var
   Read: TGISShape;
@@ -330,6 +341,34 @@ begin
   finally
     R.Free;
   end;
+  DeleteTempFiles;
+end;
+
+procedure TESRIWriterTests.FileHeader_SizeFields_MatchFileSizes;
+// Two three-point polylines give a 308 byte shape file, so the big-endian
+// size field holds 154: a value with its low byte above 127, which the
+// byte swapping must handle without signed overflow
+var
+  Line: TMultiPoint;
+begin
+  DeleteTempFiles;
+  SetLength(Line, 3);
+  Line[0] := TCoordinate.Create(0, 0);
+  Line[1] := TCoordinate.Create(5, 5);
+  Line[2] := TCoordinate.Create(10, 0);
+
+  var W := TESRIPolyLineShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write(Line, []);
+    W.Write(Line, []);
+  finally
+    W.Free;
+  end;
+
+  Assert.AreEqual(308, Integer(TFile.GetSize(TempBase + '.shp')), 'Shape file size');
+  Assert.AreEqual(154, BigEndianHeaderField(TempBase + '.shp'), 'Shape file size field');
+  Assert.AreEqual(Integer(TFile.GetSize(TempBase + '.shx')) div 2,
+                  BigEndianHeaderField(TempBase + '.shx'), 'Index file size field');
   DeleteTempFiles;
 end;
 
