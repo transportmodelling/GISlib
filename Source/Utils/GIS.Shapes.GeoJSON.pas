@@ -13,7 +13,7 @@ interface
 
 Uses
   SysUtils, Classes, Rtti, Generics.Collections, JSON, JSON.Types, JSON.Writers, JSON.ObjArr,
-  GIS, GIS.Shapes;
+  Json.Eval, GIS, GIS.Shapes;
 
 Type
   TGeoJSONReader = Class(TGISShapesReader)
@@ -21,16 +21,21 @@ Type
   private
     Type
       TGeoJSONStreamReader = Class(TStreamReader)
+      private
+        Procedure SkipToFeatures;
       public
         Constructor Create(const FileName: TFileName);
       end;
     Var
       StreamReader: TGeoJSONStreamReader;
       FeaturesParser: TJsonObjectArrayParser;
+    Class Function PropertyValue(const Value: TJsonValue): Variant; static;
     Function  ReadPoint(const Point: TJsonValue): TCoordinate;
     Function  ReadMultiPoint(const MultiPoint: TJsonValue): TMultiPoint;
     Function  ReadMultiPoints(const MultiPoints: TJsonValue): TMultiPoints;
     Function  ReadMultiPolygon(const MultiPolygon: TJsonValue): TMultiPoints;
+    Procedure ReadGeometry(const GeoJsonObject: TJsonObject; out Shape: TGISShape);
+    Function  ReadProperties(const GeoJsonObject: TJsonObject): TGISShapeProperties;
   public
     Constructor Create(const FileName: TFileName); override;
     Function ReadShape(out Shape: TGISShape; out Properties: TGISShapeProperties): Boolean; override;
@@ -70,7 +75,12 @@ implementation
 Constructor TGeoJSONReader.TGeoJSONStreamReader.Create(const FileName: TFileName);
 begin
   inherited Create(FileName,Tencoding.ANSI);
-  // Read up to the Features array
+  SkipToFeatures;
+end;
+
+Procedure TGeoJSONReader.TGeoJSONStreamReader.SkipToFeatures;
+// Reads up to the value of the features property
+begin
   while (not EndOfStream) and (Char(Peek) in [#10,#13,#32]) do Read;
   if (not EndOfStream) and (Char(Peek) = '{') then
   begin
@@ -106,12 +116,22 @@ end;
 ////////////////////////////////////////////////////////////////////////////////
 
 Constructor TGeoJSONReader.Create(const FileName: TFileName);
-Var
-  PropertyName: String;
 begin
   inherited Create(FileName);
   StreamReader := TGeoJSONStreamReader.Create(FileName);
   FeaturesParser := TJsonObjectArrayParser.Create(StreamReader);
+end;
+
+Class Function TGeoJSONReader.PropertyValue(const Value: TJsonValue): Variant;
+begin
+  if Value is TJSONNumber then
+  begin
+    var NumberValue := TJSONNumber(Value).AsDouble;
+    if Frac(NumberValue) = 0 then Result := Trunc(NumberValue) else Result := NumberValue;
+  end else
+  if Value is TJSONString then Result := Value.Value else
+  if Value is TJSONBool then Result := TJSONBool(Value).AsBoolean else
+  Result := Value.ToString;
 end;
 
 Function TGeoJSONReader.ReadPoint(const Point: TJsonValue): TCoordinate;
@@ -173,67 +193,51 @@ begin
     raise Exception.Create('Invalid GeoJson-object');
 end;
 
+Procedure TGeoJSONReader.ReadGeometry(const GeoJsonObject: TJsonObject; out Shape: TGISShape);
+Var
+  GeometryType: String;
+  Coordinates: TJsonValue;
+begin
+  if TJsonEvaluator.GetStr(GeoJsonObject,['geometry','type'],GeometryType) and
+     TJsonEvaluator.NavigateTo(GeoJsonObject,['geometry','coordinates'],Coordinates) then
+  begin
+    if GeometryType = 'Point' then Shape.AssignPoint(ReadPoint(Coordinates)) else
+    if GeometryType = 'MultiPoint' then Shape.AssignPoints(ReadMultiPoint(Coordinates)) else
+    if GeometryType = 'LineString' then Shape.AssignLine(ReadMultiPoint(Coordinates)) else
+    if GeometryType = 'MultiLineString' then Shape.AssignPolyLine(ReadMultiPoints(Coordinates)) else
+    if GeometryType = 'Polygon' then Shape.AssignPolyPolygon(ReadMultiPoints(Coordinates)) else
+    if GeometryType = 'MultiPolygon' then Shape.AssignPolyPolygon(ReadMultiPolygon(Coordinates)) else
+    if GeometryType = 'GeometryCollection' then raise exception.Create('Unsupported geometry type') else
+    raise Exception.Create('Invalid GeoJson-object');
+  end else
+    raise Exception.Create('Invalid GeoJson-object');
+end;
+
+Function TGeoJSONReader.ReadProperties(const GeoJsonObject: TJsonObject): TGISShapeProperties;
+Var
+  Fields: TArray<TJsonField>;
+begin
+  if TJsonEvaluator.GetFields(GeoJsonObject,['properties'],Fields) then
+  begin
+    SetLength(Result,Length(Fields));
+    for var Field := low(Fields) to high(Fields) do
+    Result[Field] := TPair<String,Variant>.Create(Fields[Field].Key,PropertyValue(Fields[Field].Value));
+  end else
+    raise Exception.Create('Invalid GeoJson-object');
+end;
+
 Function TGeoJSONReader.ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean;
 begin
   if not EndOfFile then
   begin
     Result := true;
-    // Create GEOjson object
-    var Json := FeaturesParser.Next;
-    var JsonValue := TJSONObject.ParseJSONValue(Json);
+    var JsonValue := TJSONObject.ParseJSONValue(FeaturesParser.Next);
     try
       if Assigned(JsonValue) and (JsonValue is TJsonObject) then
       begin
         var GeoJsonObject := JsonValue as TJsonObject;
-        // Set shape
-        var GeometryValue := GeoJsonObject.Get('geometry').JsonValue;
-        if Assigned(GeometryValue) and (GeometryValue is TJsonObject) then
-        begin
-          var GeometryObject := GeometryValue as TJsonObject;
-          var Coordinates := GeometryObject.Get('coordinates').JsonValue;
-          // Get geometry type
-          var GeometryType := GeometryObject.GetValue('type');
-          if Assigned(GeometryType) then
-          begin
-            if GeometryType.Value = 'Point' then Shape.AssignPoint(ReadPoint(Coordinates)) else
-            if GeometryType.Value = 'MultiPoint' then Shape.AssignPoints(ReadMultiPoint(Coordinates)) else
-            if GeometryType.Value = 'LineString' then Shape.AssignLine(ReadMultiPoint(Coordinates)) else
-            if GeometryType.Value = 'MultiLineString' then Shape.AssignPolyLine(ReadMultiPoints(Coordinates)) else
-            if GeometryType.Value = 'Polygon' then Shape.AssignPolyPolygon(ReadMultiPoints(Coordinates)) else
-            if GeometryType.Value = 'MultiPolygon' then Shape.AssignPolyPolygon(ReadMultiPolygon(Coordinates)) else
-            if GeometryType.Value = 'GeometryCollection' then raise exception.Create('Unsupported geometry type') else
-            raise Exception.Create('Invalid GeoJson-object');
-          end else
-            raise Exception.Create('Invalid GeoJson-object');
-        end else
-          raise Exception.Create('Invalid GeoJson-object');
-        // Set properties
-        var PropertiesValue := GeoJsonObject.Get('properties').JsonValue;
-        if Assigned(PropertiesValue) and (PropertiesValue is TJsonObject) then
-        begin
-          var Index := 0;
-          var PropertiesObject := PropertiesValue as TJsonObject;
-          SetLength(Properties,PropertiesObject.Count);
-          for var Pair in PropertiesObject do
-          begin
-            if Pair.JsonValue is TJSONNumber then
-            begin
-              var NumberValue := TJSONNumber(Pair.JsonValue).AsDouble;
-              if Frac(NumberValue) = 0 then
-                Properties[Index] := TPair<string,Variant>.Create(Pair.JsonString.Value,Trunc(NumberValue))
-              else
-                Properties[Index] := TPair<string,Variant>.Create(Pair.JsonString.Value,NumberValue)
-            end else
-            if Pair.JsonValue is TJSONString then
-              Properties[Index] := TPair<string,Variant>.Create(Pair.JsonString.Value,Pair.JsonValue.Value)
-            else if Pair.JsonValue is TJSONBool then
-              Properties[Index] := TPair<string,Variant>.Create(Pair.JsonString.Value,TJSONBool(Pair.JsonValue).AsBoolean)
-            else
-              Properties[Index] := TPair<string,Variant>.Create(Pair.JsonString.Value,Pair.JsonValue.ToString);
-            Inc(Index);
-          end;
-        end else
-          raise Exception.Create('Invalid GeoJson-object');
+        ReadGeometry(GeoJsonObject,Shape);
+        Properties := ReadProperties(GeoJsonObject);
       end else
         raise Exception.Create('Invalid GeoJson-object')
     finally

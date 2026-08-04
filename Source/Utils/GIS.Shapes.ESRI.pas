@@ -37,6 +37,8 @@ Type
     ShapesWriter,IndexWriter: TBinaryWriter;
     DBFWriter: TDBFWriter;
     Procedure WriteFileHeader(const Writer: TBinaryWriter);
+    Procedure WriteBoundingBox(const Writer: TBinaryWriter; const Box: TCoordinateRect);
+    Procedure WriteRecordHeader(ContentLength: Int32);
     Procedure WriteMultiPoints(MultiPoints: TMultiPoints);
     Procedure UpdateFileHeader(const Writer: TBinaryWriter);
     Procedure WriteProperties(const Properties: array of Variant);
@@ -255,11 +257,26 @@ begin
   for var Cnt := 1 to 6 do Writer.Write(Unused);
   Writer.Write(Version);
   Writer.Write(ShapeType);
-  Writer.Write(BoundingBox.Left);
-  Writer.Write(BoundingBox.Bottom);
-  Writer.Write(BoundingBox.Right);
-  Writer.Write(BoundingBox.Top);
+  WriteBoundingBox(Writer,BoundingBox);
   for var Cnt := 1 to 4 do Writer.Write(MZCoord);
+end;
+
+Procedure TESRIShapeFileWriter.WriteBoundingBox(const Writer: TBinaryWriter; const Box: TCoordinateRect);
+begin
+  Writer.Write(Box.Left);
+  Writer.Write(Box.Bottom);
+  Writer.Write(Box.Right);
+  Writer.Write(Box.Top);
+end;
+
+Procedure TESRIShapeFileWriter.WriteRecordHeader(ContentLength: Int32);
+// Writes the index file entry and the record header in the shape file
+begin
+  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
+  IndexWriter.Write(SwapBytes(ContentLength));
+  ShapesWriter.Write(SwapBytes(Count));
+  ShapesWriter.Write(SwapBytes(ContentLength));
+  ShapesWriter.Write(ShapeType);
 end;
 
 Procedure TESRIShapeFileWriter.WriteMultiPoints(MultiPoints: TMultiPoints);
@@ -280,18 +297,9 @@ begin
     ShapeBoundingBox.Enclose(MultiPoints[Part]);
   end;
   BoundingBox.Enclose(ShapeBoundingBox);
-  // Write index file
-  var ContentLength: Int32 := 22+2*NParts+8*NPoints;
-  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
-  IndexWriter.Write(SwapBytes(ContentLength));
-  // Write shape file
-  ShapesWriter.Write(SwapBytes(Count));
-  ShapesWriter.Write(SwapBytes(ContentLength));
-  ShapesWriter.Write(ShapeType);
-  ShapesWriter.Write(ShapeBoundingBox.Left);
-  ShapesWriter.Write(ShapeBoundingBox.Bottom);
-  ShapesWriter.Write(ShapeBoundingBox.Right);
-  ShapesWriter.Write(ShapeBoundingBox.Top);
+  // Write shape record
+  WriteRecordHeader(22+2*NParts+8*NPoints);
+  WriteBoundingBox(ShapesWriter,ShapeBoundingBox);
   ShapesWriter.Write(NParts);
   ShapesWriter.Write(NPoints);
   for var Part := 0 to NParts-1 do ShapesWriter.Write(Indices[Part]);
@@ -311,10 +319,7 @@ begin
   Writer.Write(SwapBytes(FileSize));
   // Update bounding box
   Writer.BaseStream.Position := 36;
-  Writer.Write(BoundingBox.Left);
-  Writer.Write(BoundingBox.Bottom);
-  Writer.Write(BoundingBox.Right);
-  Writer.Write(BoundingBox.Top);
+  WriteBoundingBox(Writer,BoundingBox);
   // Close file
   Writer.Free;
 end;
@@ -353,13 +358,8 @@ Procedure TESRIPointShapeFileWriter.Write(Point: TCoordinate; const Properties: 
 begin
   Inc(Count);
   BoundingBox.Enclose(Point);
-  // Write index file
-  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
-  IndexWriter.Write(SwapBytes(ContentLength));
-  // Write shape file
-  ShapesWriter.Write(SwapBytes(Count));
-  ShapesWriter.Write(SwapBytes(ContentLength));
-  ShapesWriter.Write(ShapeType);
+  // Write shape record
+  WriteRecordHeader(ContentLength);
   ShapesWriter.Write(Point.X);
   ShapesWriter.Write(Point.Y);
   // Write properties
@@ -386,17 +386,9 @@ begin
   ShapeBoundingBox.Clear;
   for var Point := 0 to NPoints-1 do ShapeBoundingBox.Enclose(MultiPoint[Point]);
   BoundingBox.Enclose(ShapeBoundingBox);
-  // Write index file
-  IndexWriter.Write(SwapBytes(ShapesWriter.BaseStream.Position div 2));
-  IndexWriter.Write(SwapBytes(ContentLength));
-  // Write shape file
-  ShapesWriter.Write(SwapBytes(Count));
-  ShapesWriter.Write(SwapBytes(ContentLength));
-  ShapesWriter.Write(ShapeType);
-  ShapesWriter.Write(ShapeBoundingBox.Left);
-  ShapesWriter.Write(ShapeBoundingBox.Bottom);
-  ShapesWriter.Write(ShapeBoundingBox.Right);
-  ShapesWriter.Write(ShapeBoundingBox.Top);
+  // Write shape record
+  WriteRecordHeader(ContentLength);
+  WriteBoundingBox(ShapesWriter,ShapeBoundingBox);
   ShapesWriter.Write(NPoints);
   for var Point := 0 to NPoints-1 do
   begin

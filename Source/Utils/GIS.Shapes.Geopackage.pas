@@ -56,21 +56,37 @@ type
   // Multi-geometry rows (MultiPolygon etc.) produce one shape per sub-geometry.
   // Create via TGeopackage.CreateReader rather than directly.
   private
-    FConnection: TFDConnection; // not owned — belongs to TGeopackage
-    FQuery: TFDQuery;
-    FGeomColumnName: String;
-    FBuffer: TList<TGISShape>; // sub-shapes waiting to be returned
-    FBufferProps: TGISShapeProperties; // properties shared by buffered shapes
+    Type
+      // WKB scan state: the geometry bytes with the read position and the
+      // byte order and dimension flags of the geometry being read
+      TWKBState = record
+        Bytes: TBytes;
+        Position: Integer;
+        ByteOrder: Byte;
+        HasZ,HasM: Boolean;
+      end;
+    Var
+      FConnection: TFDConnection; // not owned — belongs to TGeopackage
+      FQuery: TFDQuery;
+      FGeomColumnName: String;
+      FBuffer: TList<TGISShape>; // sub-shapes waiting to be returned
+      FBufferProps: TGISShapeProperties; // properties shared by buffered shapes
     Function  FindGeomColumn(const LayerName: String): String;
     Procedure OpenQuery(const LayerName: String);
     // GeoPackage geometry blob → list of TGISShape
     Function  ParseBlob(const Bytes: TBytes; ShapeList: TList<TGISShape>): Boolean;
     // WKB parser — appends one or more shapes to ShapeList (recursive for multi-types)
-    Procedure ReadWKB(const B: TBytes; var P: Integer; ShapeList: TList<TGISShape>);
-    Procedure ReadRing(const B: TBytes; var P: Integer; ByteOrder: Byte; HasZ,HasM: Boolean; out Ring: TMultiPoint);
-    Procedure ReadCoord(const B: TBytes; var P: Integer; ByteOrder: Byte; HasZ,HasM: Boolean; out X, Y: Double);
-    Function  ReadInt32(const B: TBytes; var P: Integer; ByteOrder: Byte): Int32;
-    Function  ReadF64  (const B: TBytes; var P: Integer; ByteOrder: Byte): Double;
+    Procedure ReadWKB(var State: TWKBState; ShapeList: TList<TGISShape>);
+    Function  ReadGeometryHeader(var State: TWKBState): Integer;
+    Procedure ReadPoint(var State: TWKBState; ShapeList: TList<TGISShape>);
+    Procedure ReadLineString(var State: TWKBState; ShapeList: TList<TGISShape>);
+    Procedure ReadPolygon(var State: TWKBState; ShapeList: TList<TGISShape>);
+    Procedure ReadMultiLineString(var State: TWKBState; ShapeList: TList<TGISShape>);
+    Procedure ReadMultiPolygon(var State: TWKBState; ShapeList: TList<TGISShape>);
+    Procedure ReadRing(var State: TWKBState; out Ring: TMultiPoint);
+    Function  ReadCoordinate(var State: TWKBState): TCoordinate;
+    Function  ReadInt32(var State: TWKBState): Int32;
+    Function  ReadF64(var State: TWKBState): Double;
     Procedure DecodeGeomType(GeomType: Integer; out BaseType: Integer; out HasZ,HasM: Boolean);
   public
     Constructor Create(Connection: TFDConnection; const LayerName: String); reintroduce;
@@ -86,6 +102,9 @@ type
     Class procedure WriteInt32LE(Stream: TStream; Value: Int32); static;
     Class procedure WriteF64LE (Stream: TStream; Value: Double); static;
     Class procedure WriteRing  (Stream: TStream; const Part: TShapePart); static;
+    Class procedure WritePointWKB(Stream: TStream; const Shape: TGISShape); static;
+    Class procedure WriteLineWKB(Stream: TStream; const Shape: TGISShape); static;
+    Class procedure WritePolygonWKB(Stream: TStream; const Shape: TGISShape); static;
   private
     FConnection: TFDConnection;  // not owned — belongs to TGeopackageWriter
     FLayerName: String;
@@ -249,51 +268,58 @@ begin
   FQuery.Open;
 end;
 
-Function TGeopackageReader.ReadInt32(const B: TBytes; var P: Integer; ByteOrder: Byte): Int32;
+Function TGeopackageReader.ReadInt32(var State: TWKBState): Int32;
 begin
-  if ByteOrder = 1 then
-    // little-endian
-    Result := Int32(B[P]) or (Int32(B[P+1]) shl 8) or (Int32(B[P+2]) shl 16) or (Int32(B[P+3]) shl 24)
-  else
-    // big-endian
-    Result := (Int32(B[P]) shl 24) or (Int32(B[P+1]) shl 16) or (Int32(B[P+2]) shl 8) or Int32(B[P+3]);
-  Inc(P, 4);
+  with State do
+  begin
+    if ByteOrder = 1 then
+      // little-endian
+      Result := Int32(Bytes[Position]) or (Int32(Bytes[Position+1]) shl 8) or
+                (Int32(Bytes[Position+2]) shl 16) or (Int32(Bytes[Position+3]) shl 24)
+    else
+      // big-endian
+      Result := (Int32(Bytes[Position]) shl 24) or (Int32(Bytes[Position+1]) shl 16) or
+                (Int32(Bytes[Position+2]) shl 8) or Int32(Bytes[Position+3]);
+    Inc(Position,4);
+  end;
 end;
 
-Function TGeopackageReader.ReadF64(const B: TBytes; var P: Integer; ByteOrder: Byte): Double;
+Function TGeopackageReader.ReadF64(var State: TWKBState): Double;
 Var
   V: UInt64;
 begin
-  if ByteOrder = 1 then
-    // little-endian
-    V := UInt64(B[P]) or (UInt64(B[P+1]) shl 8)  or (UInt64(B[P+2]) shl 16) or (UInt64(B[P+3]) shl 24) or
-         (UInt64(B[P+4]) shl 32) or (UInt64(B[P+5]) shl 40) or (UInt64(B[P+6]) shl 48) or (UInt64(B[P+7]) shl 56)
-  else
-    // big-endian
-    V := (UInt64(B[P])   shl 56) or (UInt64(B[P+1]) shl 48) or (UInt64(B[P+2]) shl 40) or (UInt64(B[P+3]) shl 32) or
-         (UInt64(B[P+4]) shl 24) or (UInt64(B[P+5]) shl 16) or (UInt64(B[P+6]) shl 8)  or  UInt64(B[P+7]);
-  Move(V, Result,8);
-  Inc(P,8);
-end;
-
-Procedure TGeopackageReader.ReadCoord(const B: TBytes; var P: Integer; ByteOrder: Byte; HasZ,HasM: Boolean; out X,Y: Double);
-begin
-  X := ReadF64(B,P,ByteOrder);
-  Y := ReadF64(B,P,ByteOrder);
-  if HasZ then ReadF64(B,P,ByteOrder);  // discard Z
-  if HasM then ReadF64(B,P,ByteOrder);  // discard M
-end;
-
-Procedure TGeopackageReader.ReadRing(const B: TBytes; var P: Integer; ByteOrder: Byte; HasZ,HasM: Boolean; out Ring: TMultiPoint);
-Var
-  X, Y: Double;
-begin
-  SetLength(Ring,ReadInt32(B,P,ByteOrder));
-  for var Point := low(Ring) to high(Ring) do
+  with State do
   begin
-    ReadCoord(B,P,ByteOrder,HasZ,HasM,X,Y);
-    Ring[Point] := TCoordinate.Create(X, Y);
+    if ByteOrder = 1 then
+      // little-endian
+      V := UInt64(Bytes[Position]) or (UInt64(Bytes[Position+1]) shl 8)  or
+           (UInt64(Bytes[Position+2]) shl 16) or (UInt64(Bytes[Position+3]) shl 24) or
+           (UInt64(Bytes[Position+4]) shl 32) or (UInt64(Bytes[Position+5]) shl 40) or
+           (UInt64(Bytes[Position+6]) shl 48) or (UInt64(Bytes[Position+7]) shl 56)
+    else
+      // big-endian
+      V := (UInt64(Bytes[Position])   shl 56) or (UInt64(Bytes[Position+1]) shl 48) or
+           (UInt64(Bytes[Position+2]) shl 40) or (UInt64(Bytes[Position+3]) shl 32) or
+           (UInt64(Bytes[Position+4]) shl 24) or (UInt64(Bytes[Position+5]) shl 16) or
+           (UInt64(Bytes[Position+6]) shl 8)  or  UInt64(Bytes[Position+7]);
+    Inc(Position,8);
   end;
+  Move(V,Result,8);
+end;
+
+Function TGeopackageReader.ReadCoordinate(var State: TWKBState): TCoordinate;
+begin
+  var X := ReadF64(State);
+  var Y := ReadF64(State);
+  if State.HasZ then ReadF64(State);  // discard Z
+  if State.HasM then ReadF64(State);  // discard M
+  Result := TCoordinate.Create(X,Y);
+end;
+
+Procedure TGeopackageReader.ReadRing(var State: TWKBState; out Ring: TMultiPoint);
+begin
+  SetLength(Ring,ReadInt32(State));
+  for var Point := low(Ring) to high(Ring) do Ring[Point] := ReadCoordinate(State);
 end;
 
 Procedure TGeopackageReader.DecodeGeomType(GeomType: Integer; out BaseType: Integer; out HasZ,HasM: Boolean);
@@ -319,115 +345,127 @@ begin
     BaseType := GeomType;
 end;
 
-Procedure TGeopackageReader.ReadWKB(const B: TBytes; var P: Integer; ShapeList: TList<TGISShape>);
+Function TGeopackageReader.ReadGeometryHeader(var State: TWKBState): Integer;
+// Reads the byte order and geometry type of the next geometry, setting the
+// state's byte order and dimension flags; returns the base geometry type
+begin
+  State.ByteOrder := State.Bytes[State.Position];
+  Inc(State.Position);
+  var GeomType := ReadInt32(State);
+  DecodeGeomType(GeomType,Result,State.HasZ,State.HasM);
+end;
+
+Procedure TGeopackageReader.ReadPoint(var State: TWKBState; ShapeList: TList<TGISShape>);
 Var
-  BaseType,SubGeomType,SubBaseType: Integer;
-  HasZ,HasM,SubHasZ,SubHasM: Boolean;
+  Shape: TGISShape;
+begin
+  var Point := ReadCoordinate(State);
+  Shape.AssignPoint(Point.X,Point.Y);
+  ShapeList.Add(Shape);
+end;
+
+Procedure TGeopackageReader.ReadLineString(var State: TWKBState; ShapeList: TList<TGISShape>);
+Var
+  Ring: TMultiPoint;
+  Shape: TGISShape;
+begin
+  ReadRing(State,Ring);
+  Shape.AssignLine(Ring);
+  ShapeList.Add(Shape);
+end;
+
+Procedure TGeopackageReader.ReadPolygon(var State: TWKBState; ShapeList: TList<TGISShape>);
+// Exterior ring + optional holes
+Var
+  Ring: TMultiPoint;
+  Parts: TArray<TShapePart>;
+  Shape: TGISShape;
+begin
+  var NRings := ReadInt32(State);
+  if NRings > 0 then
+  begin
+    SetLength(Parts,NRings);
+    for var Part := 0 to NRings-1 do
+    begin
+      ReadRing(State,Ring);
+      Parts[Part] := TShapePart.Create(Ring,true);
+    end;
+    if NRings = 1 then
+      Shape.AssignPolygon(Parts[0].AsMultiPoint)
+    else
+      Shape.AssignPolyPolygon(Parts);
+    ShapeList.Add(Shape);
+  end;
+end;
+
+Procedure TGeopackageReader.ReadMultiLineString(var State: TWKBState; ShapeList: TList<TGISShape>);
+// All segments combined into one polyline
+Var
   Ring: TMultiPoint;
   Lines: TMultiPoints;
-  Parts: array of TShapePart;
   Shape: TGISShape;
-  X,Y: Double;
 begin
-  if P < Length(B) then
+  var NParts := ReadInt32(State);
+  SetLength(Lines,NParts);
+  for var Part := 0 to NParts-1 do
   begin
-    var ByteOrder := B[P]; Inc(P);
-    var GeomType  := ReadInt32(B,P,ByteOrder);
-    DecodeGeomType(GeomType,BaseType,HasZ,HasM);
-    case BaseType of
-      1: begin
-           // Point
-           ReadCoord(B,P,ByteOrder,HasZ,HasM,X,Y);
-           Shape.AssignPoint(X,Y);
-           ShapeList.Add(Shape);
-         end;
+    ReadGeometryHeader(State);
+    ReadRing(State,Ring);
+    Lines[Part] := Ring;  // TArray<TCoordinate> → TMultiPoint (assignment-compatible)
+  end;
+  Shape.AssignPolyLine(Lines);
+  ShapeList.Add(Shape);
+end;
 
-      2: begin
-           // LineString
-           ReadRing(B,P,ByteOrder,HasZ,HasM,Ring);
-           Shape.AssignLine(Ring);
-           ShapeList.Add(Shape);
-         end;
-      3: begin
-           // Polygon — exterior ring + optional holes
-           var NRings := ReadInt32(B,P,ByteOrder);
-           if NRings > 0 then
-           begin
-             SetLength(Parts,NRings);
-             for var Part := 0 to NRings-1 do
-             begin
-               ReadRing(B,P,ByteOrder,HasZ,HasM,Ring);
-               Parts[Part] := TShapePart.Create(Ring,true);
-             end;
-             if NRings = 1 then
-               Shape.AssignPolygon(Parts[0].AsMultiPoint)
-             else
-               Shape.AssignPolyPolygon(Parts);
-             ShapeList.Add(Shape);
-           end;
-         end;
-      4: begin
-           // MultiPoint — one shape per point
-           var NParts := ReadInt32(B,P,ByteOrder);
-           for var Part := 0 to NParts-1 do ReadWKB(B,P,ShapeList);
-         end;
-      5: begin
-           // MultiLineString — all segments combined into one polyline
-           var NParts := ReadInt32(B,P,ByteOrder);
-           SetLength(Lines,NParts);
-           for var Part := 0 to NParts - 1 do
-           begin
-             var SubByteOrder := B[P];
-             Inc(P);
-             SubGeomType := ReadInt32(B,P,SubByteOrder);
-             DecodeGeomType(SubGeomType,SubBaseType,SubHasZ,SubHasM);
-             ReadRing(B,P,SubByteOrder,SubHasZ,SubHasM,Ring);
-             Lines[Part] := Ring;  // TArray<TCoordinate> → TMultiPoint (assignment-compatible)
-           end;
-           Shape.AssignPolyLine(Lines);
-           ShapeList.Add(Shape);
-         end;
-      6: begin
-           // MultiPolygon — all rings combined into one shape
-           var NParts  := ReadInt32(B,P,ByteOrder);
-           var TotalRings := 0;
-           SetLength(Parts,0);
-           for var Part := 0 to NParts - 1 do
-           begin
-             var SubByteOrder := B[P];
-             Inc(P);
-             SubGeomType := ReadInt32(B,P,SubByteOrder);
-             DecodeGeomType(SubGeomType,SubBaseType,SubHasZ,SubHasM);
-             if SubBaseType = 3 then
-             begin
-               var NumSubRings := ReadInt32(B,P,SubByteOrder);
-               SetLength(Parts,TotalRings+NumSubRings);
-               for var SubRing := 0 to NumSubRings - 1 do
-               begin
-                 ReadRing(B, P, SubByteOrder, SubHasZ, SubHasM, Ring);
-                 Parts[TotalRings+SubRing] := TShapePart.Create(Ring, True);
-               end;
-               Inc(TotalRings,NumSubRings);
-             end;
-           end;
-           if TotalRings = 1 then
-             Shape.AssignPolygon(Parts[0].AsMultiPoint)
-           else
-             if TotalRings > 1 then Shape.AssignPolyPolygon(Parts);
-           if TotalRings > 0 then ShapeList.Add(Shape);
-         end;
-      7: begin
-           // GeometryCollection — each sub-geometry as its own shape
-           var NParts := ReadInt32(B,P,ByteOrder);
-           for var Part := 0 to NParts - 1 do ReadWKB(B,P,ShapeList);
-         end;
+Procedure TGeopackageReader.ReadMultiPolygon(var State: TWKBState; ShapeList: TList<TGISShape>);
+// All rings combined into one shape
+Var
+  Ring: TMultiPoint;
+  Parts: TArray<TShapePart>;
+  Shape: TGISShape;
+begin
+  var NParts := ReadInt32(State);
+  var TotalRings := 0;
+  SetLength(Parts,0);
+  for var Part := 0 to NParts-1 do
+  if ReadGeometryHeader(State) = 3 then
+  begin
+    var NumSubRings := ReadInt32(State);
+    SetLength(Parts,TotalRings+NumSubRings);
+    for var SubRing := 0 to NumSubRings-1 do
+    begin
+      ReadRing(State,Ring);
+      Parts[TotalRings+SubRing] := TShapePart.Create(Ring,true);
     end;
+    Inc(TotalRings,NumSubRings);
+  end;
+  if TotalRings = 1 then
+    Shape.AssignPolygon(Parts[0].AsMultiPoint)
+  else
+    if TotalRings > 1 then Shape.AssignPolyPolygon(Parts);
+  if TotalRings > 0 then ShapeList.Add(Shape);
+end;
+
+Procedure TGeopackageReader.ReadWKB(var State: TWKBState; ShapeList: TList<TGISShape>);
+begin
+  if State.Position < Length(State.Bytes) then
+  case ReadGeometryHeader(State) of
+    1: ReadPoint(State,ShapeList);
+    2: ReadLineString(State,ShapeList);
+    3: ReadPolygon(State,ShapeList);
+    5: ReadMultiLineString(State,ShapeList);
+    6: ReadMultiPolygon(State,ShapeList);
+    // MultiPoint and GeometryCollection: each sub-geometry as its own shape
+    4,7: begin
+           var NParts := ReadInt32(State);
+           for var Part := 0 to NParts-1 do ReadWKB(State,ShapeList);
+         end;
   end;
 end;
 
 Function TGeopackageReader.ParseBlob(const Bytes: TBytes; ShapeList: TList<TGISShape>): Boolean;
-var
-  WkbOffset: Integer;
+Var
+  State: TWKBState;
 begin
   Result := false;
   if Length(Bytes) >= 8 then
@@ -439,8 +477,9 @@ begin
       var EnvType := (Flags shr 1) and $07;
       if EnvType > 4 then EnvType := 0;
       // Header layout: 2 magic + 1 version + 1 flags + 4 SRID = 8 bytes, then envelope
-      WkbOffset := 8 + GpkgEnvSize[EnvType];
-      ReadWKB(Bytes,WkbOffset,ShapeList);
+      State.Bytes := Bytes;
+      State.Position := 8 + GpkgEnvSize[EnvType];
+      ReadWKB(State,ShapeList);
       Result := ShapeList.Count > 0;
     end;
   end;
@@ -566,6 +605,39 @@ begin
   FQuery.SQL.Text := SQL;
 end;
 
+Class procedure TGeopackageLayerWriter.WritePointWKB(Stream: TStream; const Shape: TGISShape);
+begin
+  WriteInt32LE(Stream,1);  // WKBPoint
+  WriteF64LE(Stream,Shape[0,0].X);
+  WriteF64LE(Stream,Shape[0,0].Y);
+end;
+
+Class procedure TGeopackageLayerWriter.WriteLineWKB(Stream: TStream; const Shape: TGISShape);
+begin
+  if Shape.Count = 1 then
+  begin
+    WriteInt32LE(Stream,2);  // WKBLineString
+    WriteRing(Stream,Shape.Parts[0]);
+  end else
+  begin
+    WriteInt32LE(Stream,5);  // WKBMultiLineString
+    WriteInt32LE(Stream,Shape.Count);
+    for var Part := 0 to Shape.Count-1 do
+    begin
+      WriteByte(Stream,1);     // sub-geometry byte order
+      WriteInt32LE(Stream,2);  // WKBLineString
+      WriteRing(Stream,Shape.Parts[Part]);
+    end;
+  end;
+end;
+
+Class procedure TGeopackageLayerWriter.WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
+begin
+  WriteInt32LE(Stream,3);  // WKBPolygon — all parts are rings
+  WriteInt32LE(Stream,Shape.Count);
+  for var Part := 0 to Shape.Count-1 do WriteRing(Stream,Shape.Parts[Part]);
+end;
+
 Function TGeopackageLayerWriter.ShapeToBlob(const Shape: TGISShape): TBytes;
 begin
   Result := nil;
@@ -582,34 +654,9 @@ begin
       // WKB byte order (always little-endian)
       WriteByte(Stream,1);
       case Shape.ShapeType of
-        stPoint:
-          begin
-            WriteInt32LE(Stream,1);  // WKBPoint
-            WriteF64LE(Stream,Shape[0, 0].X);
-            WriteF64LE(Stream,Shape[0, 0].Y);
-          end;
-        stLine:
-          if Shape.Count = 1 then
-          begin
-            WriteInt32LE(Stream,2);  // WKBLineString
-            WriteRing(Stream,Shape.Parts[0]);
-          end else
-          begin
-            WriteInt32LE(Stream,5);  // WKBMultiLineString
-            WriteInt32LE(Stream,Shape.Count);
-            for var Part := 0 to Shape.Count - 1 do
-            begin
-              WriteByte(Stream,1);          // sub-geometry byte order
-              WriteInt32LE(Stream,2);       // WKBLineString
-              WriteRing(Stream,Shape.Parts[Part]);
-            end;
-          end;
-        stPolygon:
-          begin
-            WriteInt32LE(Stream,3);  // WKBPolygon — all parts are rings
-            WriteInt32LE(Stream,Shape.Count);
-            for var Part := 0 to Shape.Count-1 do WriteRing(Stream,Shape.Parts[Part]);
-          end;
+        stPoint: WritePointWKB(Stream,Shape);
+        stLine: WriteLineWKB(Stream,Shape);
+        stPolygon: WritePolygonWKB(Stream,Shape);
       end;
       // Set result
       SetLength(Result,Stream.Size);
