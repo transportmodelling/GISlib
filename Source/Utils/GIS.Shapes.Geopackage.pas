@@ -69,9 +69,10 @@ type
       FConnection: TFDConnection; // not owned — belongs to TGeopackage
       FQuery: TFDQuery;
       FGeomColumnName: String;
+      FSRID: Integer;
       FBuffer: TList<TGISShape>; // sub-shapes waiting to be returned
       FBufferProps: TGISShapeProperties; // properties shared by buffered shapes
-    Function  FindGeomColumn(const LayerName: String): String;
+    Function  FindGeomColumn(const LayerName: String; out SRID: Integer): String;
     Procedure OpenQuery(const LayerName: String);
     // GeoPackage geometry blob → list of TGISShape
     Function  ParseBlob(const Bytes: TBytes; ShapeList: TList<TGISShape>): Boolean;
@@ -92,6 +93,9 @@ type
     Constructor Create(Connection: TFDConnection; const LayerName: String); reintroduce;
     Function ReadShape(out Shape: TGISShape; out Properties: TGISShapeProperties): Boolean; override;
     Destructor Destroy; override;
+  public
+    // The layer's spatial reference, as stored in gpkg_geometry_columns.srs_id
+    Property SRID: Integer read FSRID;
   end;
 
   TGeopackageLayerWriter = class
@@ -213,22 +217,24 @@ begin
   inherited Create(LayerName); // stores layer name as FileName in base class
   FConnection := Connection;
   FBuffer := TList<TGISShape>.Create;
-  FGeomColumnName := FindGeomColumn(LayerName);
+  FGeomColumnName := FindGeomColumn(LayerName,FSRID);
   OpenQuery(LayerName);
 end;
 
-Function TGeopackageReader.FindGeomColumn(const LayerName: String): String;
+Function TGeopackageReader.FindGeomColumn(const LayerName: String; out SRID: Integer): String;
 begin
   var Query := TFDQuery.Create(nil);
   try
     Query.Connection := FConnection;
     Query.SQL.Text   :=
-      'SELECT column_name FROM gpkg_geometry_columns WHERE table_name = :t';
+      'SELECT column_name, srs_id FROM gpkg_geometry_columns WHERE table_name = :t';
     Query.ParamByName('t').AsString := LayerName;
     Query.Open;
     if not Query.IsEmpty then
-      Result := Query.Fields[0].AsString
-    else
+    begin
+      Result := Query.Fields[0].AsString;
+      SRID := Query.Fields[1].AsInteger;
+    end else
       raise Exception.CreateFmt('GeoPackage: no geometry column found for layer ''%s''', [LayerName]);
   finally
     Query.Free;

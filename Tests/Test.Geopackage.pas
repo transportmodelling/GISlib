@@ -41,6 +41,7 @@ type
     [Test] procedure Reader_AllShapesArePolygons;
     [Test] procedure Reader_BoundingBoxWithinNetherlandsDutchGrid;
     [Test] procedure Reader_ShapeCountMatchesShapefile;
+    [Test] procedure Reader_SRID_MatchesStoredValue;
 
     // Writer tests (no external data file needed)
     [Test] procedure Writer_CreatesFile;
@@ -50,6 +51,7 @@ type
     [Test] procedure Writer_RoundTrip_ShapeCount;
     [Test] procedure Writer_RoundTrip_ProvincesShapefile;
     [Test] procedure Writer_ConverterOverload_StoresCorrectSRS;
+    [Test] procedure Writer_RoundTrip_SRID;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -226,6 +228,28 @@ begin
   end;
   Assert.AreEqual(ShpCount, GpkgCount,
     'GeoPackage and shapefile should contain the same number of shapes');
+end;
+
+procedure TGeopackageTests.Reader_SRID_MatchesStoredValue;
+// Data\Provincies.gpkg was built with ogr2ogr from a shapefile with no .prj
+// sidecar, so GDAL stamped its "Undefined SRS" placeholder (srs_id 99999) on
+// the layer rather than a real EPSG code.
+var
+  Pkg: TGeopackage;
+  Reader: TGeopackageReader;
+begin
+  CheckFileExists;
+  Pkg := TGeopackage.Create(GpkgFile);
+  try
+    Reader := Pkg.CreateReader(GpkgLayerName);
+    try
+      Assert.AreEqual(99999, Reader.SRID, 'Provincies.gpkg layer should carry GDAL''s "Undefined SRS" placeholder');
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -519,6 +543,39 @@ begin
 
   Assert.AreEqual(4326, SRID, 'SRID 4326 should be stored in gpkg_spatial_ref_sys');
   Assert.IsTrue(Pos('WGS', Def) > 0, 'SRS definition should contain WGS84 WKT');
+  DeleteTempFile;
+end;
+
+procedure TGeopackageTests.Writer_RoundTrip_SRID;
+var
+  ReadSRID: Integer;
+begin
+  DeleteTempFile;
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      Writer.CreateLayerWriter('utm', 32631).Free; // UTM zone 31N
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+
+  Pkg := TGeopackage.Create(TempFile);
+  try
+    var Reader := Pkg.CreateReader('utm');
+    try
+      ReadSRID := Reader.SRID;
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+
+  Assert.AreEqual(32631, ReadSRID, 'Reader.SRID should match the SRID the layer was written with');
   DeleteTempFile;
 end;
 
