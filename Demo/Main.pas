@@ -70,6 +70,7 @@ type
     SaveLayers: TAction;
     ToolButton1: TToolButton;
     ToolButton7: TToolButton;
+    ToolButton15: TToolButton;
     procedure AddLayerAccept(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure ZoomInExecute(Sender: TObject);
@@ -140,6 +141,11 @@ implementation
 
 {$R *.dfm}
 {$R GIS.Cursor.RES}
+
+Const
+  // Wide enough for the layers toolbar to keep its buttons on one row. The
+  // toolbar wraps silently when this is too small, hiding the last buttons.
+  ExpandedLayerPanelWidth = 216;
 
 ////////////////////////////////////////////////////////////////////////////////
 // TMainForm helpers
@@ -321,7 +327,6 @@ begin
   MercatorConverter.OnChange := MercatorConverterChanged;
   DisplayCoordConverter := CoordinateSystems[0].CreateConverter;
   ShowOSMExecute(nil);
-  CollapseBtnClick(nil);
 end;
 
 procedure TMainForm.FormShow(Sender: TObject);
@@ -507,12 +512,12 @@ begin
   begin
     LayerPanel.Width      := CollapseBtn.Width;
     LayerListBox.Visible  := false;
-    CollapseBtn.Caption   := '>>';
+    CollapseBtn.Caption   := '>';
   end else
   begin
-    LayerPanel.Width      := 200;
+    LayerPanel.Width      := ExpandedLayerPanelWidth;
     LayerListBox.Visible  := true;
-    CollapseBtn.Caption   := '<<';
+    CollapseBtn.Caption   := '<';
   end;
 end;
 
