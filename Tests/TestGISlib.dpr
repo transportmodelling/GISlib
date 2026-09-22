@@ -30,6 +30,10 @@ uses
   Test.Shapes     in 'Test.Shapes.pas',
   Test.Geopackage in 'Test.Geopackage.pas',
   Test.Writers    in 'Test.Writers.pas',
+  {$IFDEF MSWINDOWS}
+  // Render tests need Vcl.Graphics and GDI+, so they build only where VCL exists
+  Test.Render     in 'Test.Render.pas',
+  {$ENDIF}
   Test.Polygon    in 'Test.Polygon.pas';
 
 begin

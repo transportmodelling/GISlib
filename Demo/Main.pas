@@ -20,7 +20,7 @@ uses
   System.Generics.Collections, FloatHlp,
   GISCoordSystem, GISFileFormat, RndrCtrl, RndrCtrl.Default,
   FireDAC.Comp.UI, FireDAC.VCLUI.Wait,
-  GIS, GIS.Shapes, GIS.Render.Shapes,
+  GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.Canvas, GIS.Render.Canvas.VCL,
   GIS.Render.PixelConv, GIS.Render.PixelConv.Mercator, GIS.Render.Tiles.OSM,
   GIS.CoordConv, GIS.CoordConv.WGS84;
 
@@ -717,19 +717,20 @@ begin
           ShapesImage.Canvas.Brush.Color := clWhite;
           ShapesImage.Canvas.FillRect(Rect(0,0,ShapesImage.Width,ShapesImage.Height));
           if OSMActive then
-            OSMLayer.DrawLayer(ShapesImage,MercatorConverter);
+            OSMLayer.DrawLayer(GISCanvas(ShapesImage),MercatorConverter);
           for var Layer in Layers do
             if Layer.Visible then
             begin
               LayerImage.Width  := ShapesImage.Width;
               LayerImage.Height := ShapesImage.Height;
               LayerImage.Canvas.Draw(0,0,ShapesImage);
-              LayerImage.Canvas.Pen.Color   := Layer.PenColor;
-              LayerImage.Canvas.Pen.Width   := Layer.PenWidth;
-              LayerImage.Canvas.Pen.Style   := Layer.PenStyle;
-              LayerImage.Canvas.Brush.Color := Layer.BrushColor;
-              LayerImage.Canvas.Brush.Style := Layer.BrushStyle;
-              Layer.Shapes.DrawLayer(LayerImage,Layer.Converter);
+              var LayerStyle := Layer.Shapes.Style;
+              LayerStyle.Stroke := TGISStroke.Create(AlphaColor(Layer.PenColor),
+                                                     Layer.PenWidth,GISPenStyle(Layer.PenStyle));
+              LayerStyle.Fill   := TGISFill.Create(AlphaColor(Layer.BrushColor),
+                                                   GISBrushStyle(Layer.BrushStyle));
+              Layer.Shapes.Style := LayerStyle;
+              Layer.Shapes.DrawLayer(GISCanvas(LayerImage),Layer.Converter);
               ShapesImage.Canvas.Draw(0,0,LayerImage,Layer.Opacity);
             end;
         finally

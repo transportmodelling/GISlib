@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Graphics, GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.PixelConv;
+  GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.PixelConv;
 
 Type
   TNetworkLink = record
@@ -42,8 +42,7 @@ Type
     Procedure SetLinksCapacity(Capacity: Integer); virtual;
     Function LinkLabel(const Link: Integer): String; virtual;
   public
-    Constructor Create(const TransparentColor: TColor;
-                       const InitialNodesCapacity: Integer = 16384;
+    Constructor Create(const InitialNodesCapacity: Integer = 16384;
                        const InitialLinksCapacity: Integer = 16384);
     Procedure Clear;
     Function AddNode(X,Y: Float64): Integer; overload;
@@ -71,11 +70,10 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TNetworkLayer.Create(const TransparentColor: TColor;
-                                 const InitialNodesCapacity: Integer = 16384;
+Constructor TNetworkLayer.Create(const InitialNodesCapacity: Integer = 16384;
                                  const InitialLinksCapacity: Integer = 16384);
 begin
-  inherited Create(TransparentColor);
+  inherited Create;
   SetNodesCapacity(InitialNodesCapacity);
   SetLinksCapacity(InitialLinksCapacity);
   LinkRenderer := TCustomShapesLayer.TLinesRenderer.Create;

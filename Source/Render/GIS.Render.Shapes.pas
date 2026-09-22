@@ -5,6 +5,9 @@ unit GIS.Render.Shapes;
 // Author: Jaap Baak
 // https://github.com/transportmodelling/GISlib
 //
+// Draws shape layers on an IGISCanvas. This unit is RTL-only: the framework it
+// ends up rendering with is decided by the adapter the caller passes in.
+//
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -12,9 +15,9 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes, SysUtils, Types, Graphics, Generics.Defaults, Generics.Collections,
+  Classes, SysUtils, Types, UITypes, Generics.Defaults, Generics.Collections,
   GIS, GIS.Shapes, GIS.Shapes.Polygon, GIS.Shapes.Polygon.PolyLabel,
-  GIS.Render.PixelConv;
+  GIS.Render.PixelConv, GIS.Render.Canvas;
 
 Type
   TPointRenderStyle = (rsCircle,rsSquare,rsTriangleDown,rsTriangleUp,rsBitmap,
@@ -25,15 +28,18 @@ Type
   private
     FPointRenderSize: Integer;
     FPointRenderStyle: TPointRenderStyle;
-    FPointBitmap: TBitmap;
-    PolygonBitmap: TBitmap;
+    FPointImageBytes: TBytes;   // encoded symbol, empty unless a bitmap style is set
+    FPointImage: IGISImage;     // decoded lazily, see PointImage
+    FPointImageOwner: Pointer;  // canvas that decoded FPointImage
+    FStyle: TGISShapeStyle;
     Viewport: TCoordinateRect;
     Function GetBoundingBoxes(Shape: Integer): TCoordinateRect;
     Procedure InitPointRenderStyle;
     Procedure SetPointRenderSize(PointRenderSize: Integer);
     Procedure SetPointRenderStyle(PointRenderStyle: TPointRenderStyle);
-    Procedure SetPointBitmap(PointBitmap: TBitmap);
-    Procedure PointBitmapChange(Sender: TObject);
+    Procedure SetPointImageBytes(const Bytes: TBytes);
+    Function PointImage(const Canvas: IGISCanvas): IGISImage;
+    Procedure LoadPointResource(const ResourceId: Integer);
   strict protected
     Type
       TShapeRenderer = Class
@@ -43,7 +49,8 @@ Type
         Procedure WriteLabelPositions(const Writer: TBinaryWriter); virtual;
         Procedure ReadLabelPositions(const Reader: TBinaryReader); virtual;
         Procedure Draw(const ShapeLabel: String;
-                       const Canvas: TCanvas;
+                       const Canvas: IGISCanvas;
+                       const Style: TGISShapeStyle;
                        const PixelConverter: TCustomPixelConverter); virtual; abstract;
       end;
       TPointsRenderer = Class(TShapeRenderer)
@@ -53,7 +60,8 @@ Type
         Function Shape: TGISShape; override;
         Function BoundingBox: TCoordinateRect; override;
         Procedure Draw(const ShapeLabel: String;
-                       const Canvas: TCanvas;
+                       const Canvas: IGISCanvas;
+                       const Style: TGISShapeStyle;
                        const PixelConverter: TCustomPixelConverter); override;
       end;
       TLinesRenderer = Class(TShapeRenderer)
@@ -62,7 +70,8 @@ Type
         Function Shape: TGISShape; override;
         Function BoundingBox: TCoordinateRect; override;
         Procedure Draw(const ShapeLabel: String;
-                       const Canvas: TCanvas;
+                       const Canvas: IGISCanvas;
+                       const Style: TGISShapeStyle;
                        const PixelConverter: TCustomPixelConverter); override;
       end;
       TPolyPolygonsRenderer = Class(TShapeRenderer)
@@ -74,6 +83,8 @@ Type
           end;
         Var
           LabelPositions: array of TLabelPosition;
+        Function Ring(const Part: TShapePart;
+                      const PixelConverter: TCustomPixelConverter): TArray<TPointF>;
       public
         PolyPolygons: TPolyPolygons;
         ShapeBoundingBox: TCoordinateRect;
@@ -84,11 +95,12 @@ Type
         Procedure ReadLabelPositions(const Reader: TBinaryReader); override;
         Procedure Draw(const Outer: Integer;
                        const ShapeLabel: String;
-                       const Canvas: TCanvas;
-                       const HolesColor: TColor;
+                       const Canvas: IGISCanvas;
+                       const Style: TGISShapeStyle;
                        const PixelConverter: TCustomPixelConverter); overload;
         Procedure Draw(const ShapeLabel: String;
-                       const Canvas: TCanvas;
+                       const Canvas: IGISCanvas;
+                       const Style: TGISShapeStyle;
                        const PixelConverter: TCustomPixelConverter); overload; override;
       end;
     Const
@@ -99,18 +111,19 @@ Type
     Function ShapeLabel(const Shape: Integer): String; virtual;
     Function ShapeRenderer(const Shape: Integer): TCustomShapesLayer.TShapeRenderer; virtual; abstract;
     Function PaintShape(const Shape: Integer): Boolean; virtual;
-    Procedure SetPaintStyle(const Shape: Integer; const Canvas: TCanvas); virtual;
+    // The style one shape is drawn with. The default returns the layer's Style
+    // unchanged; override to vary it per shape.
+    Function ShapeStyle(const Shape: Integer): TGISShapeStyle; virtual;
   public
-    Constructor Create(const TransparentColor: TColor);
+    Constructor Create;
     Function PaintBoundingBox: TCoordinateRect;
-    Procedure DrawLayer(const Canvas: TCanvas;
-                        const PixelConverter: TCustomPixelConverter;
-                        const Width,Height: Integer); overload;
-    Procedure DrawLayer(const Bitmap: TBitmap; const PixelConverter: TCustomPixelConverter); overload;
+    Procedure DrawLayer(const Canvas: IGISCanvas; const PixelConverter: TCustomPixelConverter);
     Destructor Destroy; override;
   public
     Property BoundingBox: TCoordinateRect read FBoundingBox;
     Property BoundingBoxes[Shape: Integer]: TCoordinateRect read GetBoundingBoxes;
+    // The style the whole layer draws with, unless ShapeStyle overrides it
+    Property Style: TGISShapeStyle read FStyle write FStyle;
   end;
 
   TShapesLayer = Class(TCustomShapesLayer)
@@ -122,7 +135,7 @@ Type
   strict protected
     Function ShapeRenderer(const Shape: Integer): TCustomShapesLayer.TShapeRenderer; override;
   public
-    Constructor Create(const TransparentColor: TColor; InitialCapacity: Integer = 256);
+    Constructor Create(InitialCapacity: Integer = 256);
     Procedure Clear;
     Procedure Add(Shape: TGISShape);
     Function ShapeCount(ShapeType: TShapeType): Integer;
@@ -135,7 +148,9 @@ Type
     Property Shapes[Shape: Integer]: TGISShape read GetShapes; default;
     Property PointRenderSize: Integer read FPointRenderSize write SetPointRenderSize;
     Property PointRenderStyle: TPointRenderStyle read FPointRenderStyle write SetPointRenderStyle;
-    Property PointBitmap: TBitmap read FPointBitmap write SetPointBitmap;
+    // An encoded symbol (BMP or PNG) drawn for each point when PointRenderStyle
+    // is rsBitmap. The canvas decodes it, so no framework image type is needed.
+    Property PointImageBytes: TBytes read FPointImageBytes write SetPointImageBytes;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,6 +158,30 @@ implementation
 ////////////////////////////////////////////////////////////////////////////////
 
 {$R GIS.res}
+
+Type
+  // Declared here rather than taken from Winapi.Windows, so this unit keeps to
+  // the RTL. The symbols are still Windows resources; a non-Windows back end
+  // would supply them through PointImageBytes instead.
+  TBitmapFileHeader = packed record
+    bfType: Word;
+    bfSize: Cardinal;
+    bfReserved1,bfReserved2: Word;
+    bfOffBits: Cardinal;
+  end;
+
+  TBitmapInfoHeader = packed record
+    biSize: Cardinal;
+    biWidth,biHeight: Integer;
+    biPlanes,biBitCount: Word;
+    biCompression,biSizeImage: Cardinal;
+    biXPelsPerMeter,biYPelsPerMeter: Integer;
+    biClrUsed,biClrImportant: Cardinal;
+  end;
+  PBitmapInfoHeader = ^TBitmapInfoHeader;
+
+Const
+  RT_BITMAP = PChar(2);
 
 Procedure TCustomShapesLayer.TShapeRenderer.WriteLabelPositions(const Writer: TBinaryWriter);
 begin
@@ -165,29 +204,36 @@ begin
 end;
 
 Procedure TCustomShapesLayer.TPointsRenderer.Draw(const ShapeLabel: String;
-                                                  const Canvas: TCanvas;
+                                                  const Canvas: IGISCanvas;
+                                                  const Style: TGISShapeStyle;
                                                   const PixelConverter: TCustomPixelConverter);
 begin
-  var PointsCount := Points.Count;
-  var Radius := Layer.FPointRenderSize div 2;
-  for var Point := 0 to PointsCount-1 do
+  var Radius := Layer.FPointRenderSize/2;
+  var Image: IGISImage := nil;
+  if Layer.FPointRenderStyle >= rsBitmap then Image := Layer.PointImage(Canvas);
+  for var Point := 0 to Points.Count-1 do
   begin
-    var Pixel := PixelConverter.CoordToPixel(Points[Point]).Round;
+    var Pixel := PixelConverter.CoordToPixel(Points[Point]);
     case Layer.FPointRenderStyle of
-      rsCircle: Canvas.Ellipse(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius);
-      rsSquare: Canvas.Rectangle(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius);
-      rsTriangleUp: Canvas.Polygon([Types.Point(Pixel.X-Radius,Pixel.Y+Radius),
-                                    Types.Point(Pixel.X+Radius,Pixel.Y+Radius),
-                                    Types.Point(Pixel.X,Pixel.Y-Radius)]);
-      rsTriangleDown: Canvas.Polygon([Types.Point(Pixel.X-Radius,Pixel.Y-Radius),
-                                      Types.Point(Pixel.X+Radius,Pixel.Y-Radius),
-                                      Types.Point(Pixel.X,Pixel.Y+Radius)]);
+      rsCircle:
+        Canvas.FillEllipse(TRectF.Create(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius),
+                           Style.Fill,Style.Stroke);
+      rsSquare:
+        Canvas.FillRect(TRectF.Create(Pixel.X-Radius,Pixel.Y-Radius,Pixel.X+Radius,Pixel.Y+Radius),
+                        Style.Fill,Style.Stroke);
+      rsTriangleUp:
+        Canvas.FillPolygon([TPointF.Create(Pixel.X-Radius,Pixel.Y+Radius),
+                            TPointF.Create(Pixel.X+Radius,Pixel.Y+Radius),
+                            TPointF.Create(Pixel.X,Pixel.Y-Radius)],
+                           nil,Style.Fill,Style.Stroke);
+      rsTriangleDown:
+        Canvas.FillPolygon([TPointF.Create(Pixel.X-Radius,Pixel.Y-Radius),
+                            TPointF.Create(Pixel.X+Radius,Pixel.Y-Radius),
+                            TPointF.Create(Pixel.X,Pixel.Y+Radius)],
+                           nil,Style.Fill,Style.Stroke);
       else
-        begin
-          var X := Pixel.X - (Layer.FPointBitmap.Width div 2);
-          var Y := Pixel.Y - (Layer.FPointBitmap.Height div 2);
-          Canvas.Draw(X,Y,Layer.FPointBitmap);
-        end;
+        if Image <> nil then
+        Canvas.DrawImage(Image,Pixel.X-Image.Width/2,Pixel.Y-Image.Height/2);
     end;
   end;
 end;
@@ -205,19 +251,19 @@ begin
 end;
 
 Procedure TCustomShapesLayer.TLinesRenderer.Draw(const ShapeLabel: String;
-                                                 const Canvas: TCanvas;
+                                                 const Canvas: IGISCanvas;
+                                                 const Style: TGISShapeStyle;
                                                  const PixelConverter: TCustomPixelConverter);
+Var
+  Pixels: TArray<TPointF>;
 begin
   for var Part := 0 to Lines.Count-1 do
   begin
     var PointsCount := Lines.Parts[Part].Count;
-    var Pixel := PixelConverter.CoordToPixel(Lines[Part,0]).Round;
-    Canvas.MoveTo(Pixel.X,Pixel.Y);
-    for var Point := 1 to PointsCount-1 do
-    begin
-      Pixel := PixelConverter.CoordToPixel(Lines[Part,Point]).Round;
-      Canvas.LineTo(Pixel.X,Pixel.Y);
-    end;
+    SetLength(Pixels,PointsCount);
+    for var Point := 0 to PointsCount-1 do
+    Pixels[Point] := PixelConverter.CoordToPixel(Lines[Part,Point]);
+    Canvas.DrawPolyline(Pixels,Style.Stroke);
   end;
 end;
 
@@ -270,103 +316,81 @@ begin
   end;
 end;
 
+Function TCustomShapesLayer.TPolyPolygonsRenderer.Ring(const Part: TShapePart;
+                                                       const PixelConverter: TCustomPixelConverter): TArray<TPointF>;
+begin
+  SetLength(Result,Part.Count);
+  for var Point := 0 to Part.Count-1 do
+  Result[Point] := PixelConverter.CoordToPixel(Part[Point]);
+end;
+
 Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const Outer: Integer;
                                                         const ShapeLabel: String;
-                                                        const Canvas: TCanvas;
-                                                        const HolesColor: TColor;
+                                                        const Canvas: IGISCanvas;
+                                                        const Style: TGISShapeStyle;
                                                         const PixelConverter: TCustomPixelConverter);
 Var
   LabelPosition: TCoordinate;
-  Pixels: array of TPoint;
+  Holes: TArray<TArray<TPointF>>;
 begin
-  var OuterStyle := Canvas.Brush.Style;
-  var OuterColor := Canvas.Brush.Color;
   var PolyPolygon := PolyPolygons[Outer];
-  // Calculate pixels outer ring
-  var OuterRing := PolyPolygon.OuterRing;
-  SetLength(Pixels,OuterRing.Count);
-  for var Point := 0 to OuterRing.Count-1 do
-  Pixels[Point] := PixelConverter.CoordToPixel(OuterRing[Point]).Round;
-  // Draw outer ring
-  var PixelBoundingBox := TRect.Union(Pixels);
+  var OuterPixels := Ring(PolyPolygon.OuterRing,PixelConverter);
+  var PixelBoundingBox := TRectF.Create(TPointF.Create(OuterPixels[0].X,OuterPixels[0].Y),0,0);
+  for var Point := low(OuterPixels) to high(OuterPixels) do
+  begin
+    if OuterPixels[Point].X < PixelBoundingBox.Left then PixelBoundingBox.Left := OuterPixels[Point].X;
+    if OuterPixels[Point].X > PixelBoundingBox.Right then PixelBoundingBox.Right := OuterPixels[Point].X;
+    if OuterPixels[Point].Y < PixelBoundingBox.Top then PixelBoundingBox.Top := OuterPixels[Point].Y;
+    if OuterPixels[Point].Y > PixelBoundingBox.Bottom then PixelBoundingBox.Bottom := OuterPixels[Point].Y;
+  end;
   if (PixelBoundingBox.Width > 0) and (PixelBoundingBox.Height > 0) then
   begin
-    Canvas.Brush.Style := OuterStyle;
-    Canvas.Brush.Color := OuterColor;
-    Canvas.Polygon(Pixels);
-    // Draw label
-    var LabelSize := Canvas.TextExtent(ShapeLabel);
-    if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
-    and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
-    begin
-      if LabelPositions[Outer].Calculated then
-        LabelPosition := LabelPositions[Outer].Position
-      else
-        begin
-          LabelPosition := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
-          LabelPositions[Outer].Calculated := true;
-          LabelPositions[Outer].Position := LabelPosition;
-        end;
-      var LabelPixel := PixelConverter.CoordToPixel(LabelPosition).Round;
-      var X := LabelPixel.X - (LabelSize.cx div 2);
-      var Y := LabelPixel.Y - (LabelSize.cy div 2);
-      Canvas.Brush.Style := bsClear;
-      Canvas.TextOut(X,Y,ShapeLabel);
-    end;
-    // Draw holes
+    // The rings are filled even-odd in one path, so the holes are cut out of
+    // the fill rather than painted over in a background colour.
+    SetLength(Holes,PolyPolygon.HolesCount);
     for var Inner := 0 to PolyPolygon.HolesCount-1 do
+    Holes[Inner] := Ring(PolyPolygon.Holes[Inner],PixelConverter);
+    Canvas.FillPolygon(OuterPixels,Holes,Style.Fill,Style.Stroke);
+    // Draw label
+    if ShapeLabel <> '' then
     begin
-      // Calculate pixels hole
-      var Hole := PolyPolygon.Holes[Inner];
-      SetLength(Pixels,Hole.Count);
-      for var Point := 0 to Hole.Count-1 do
-      Pixels[Point] := PixelConverter.CoordToPixel(Hole[Point]).Round;
-      // Draw hole
-      Canvas.Brush.Style := bsSolid;
-      Canvas.Brush.Color := HolesColor;
-      Canvas.Polygon(Pixels);
+      var LabelSize := Canvas.MeasureText(ShapeLabel,Style.Text);
+      if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
+      and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
+      begin
+        if LabelPositions[Outer].Calculated then
+          LabelPosition := LabelPositions[Outer].Position
+        else
+          begin
+            LabelPosition := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
+            LabelPositions[Outer].Calculated := true;
+            LabelPositions[Outer].Position := LabelPosition;
+          end;
+        var LabelPixel := PixelConverter.CoordToPixel(LabelPosition);
+        Canvas.DrawText(LabelPixel.X,LabelPixel.Y,ShapeLabel,Style.Text,gahCenter,gavMiddle);
+      end;
     end;
   end;
-  Canvas.Brush.Style := OuterStyle;
-  Canvas.Brush.Color := OuterColor;
 end;
 
 Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const ShapeLabel: String;
-                                                        const Canvas: TCanvas;
+                                                        const Canvas: IGISCanvas;
+                                                        const Style: TGISShapeStyle;
                                                         const PixelConverter: TCustomPixelConverter);
 begin
   for var Outer := 0 to Polypolygons.Count-1 do
-  if PolyPolygons[Outer].HolesCount = 0 then
-    Draw(Outer,ShapeLabel,Canvas,0,PixelConverter)
-  else
-    begin
-      var PolygonBitmap := Layer.PolygonBitmap;
-      // Clear polygon bitmap
-      PolygonBitmap.Canvas.Brush.Style := bsSolid;
-      PolygonBitmap.Canvas.Brush.Color := PolygonBitmap.TransparentColor;
-      PolygonBitmap.Canvas.FillRect(Rect(0,0,PolygonBitmap.Width,PolygonBitmap.Height));
-      // Draw poly polygon on polygon bitmap
-      PolygonBitmap.Canvas.Font := Canvas.Font;
-      PolygonBitmap.Canvas.Pen := Canvas.Pen;
-      PolygonBitmap.Canvas.Brush := Canvas.Brush;
-      Draw(Outer,ShapeLabel,PolygonBitmap.Canvas,PolygonBitmap.TransparentColor,PixelConverter);
-      // Draw polygon bitmap on canvas
-      Canvas.Draw(0,0,PolygonBitmap);
-    end;
+  Draw(Outer,ShapeLabel,Canvas,Style,PixelConverter);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TCustomShapesLayer.Create(const TransparentColor: TColor);
-// TransparentColor designates an unused color to be used for polygon rendering
+Constructor TCustomShapesLayer.Create;
 begin
   inherited Create;
   FBoundingBox.Clear;
-  FPointBitmap := TBitmap.Create;
-  FPointBitmap.OnChange := PointBitmapChange;
-  PolygonBitmap := TBitmap.Create;
-  PolygonBitmap.Transparent := true;
-  PolygonBitmap.TransparentColor := TransparentColor;
+  FStyle.Stroke := TGISStroke.Create(TAlphaColorRec.Black);
+  FStyle.Fill := TGISFill.Create(TAlphaColorRec.White);
+  FStyle.Text := TGISTextStyle.Create('Arial',11,TAlphaColorRec.Black);
   InitPointRenderStyle;
 end;
 
@@ -379,6 +403,8 @@ Procedure TCustomShapesLayer.InitPointRenderStyle;
 begin
   FPointRenderStyle := rsCircle;
   FPointRenderSize := 6;
+  FPointImageBytes := nil;
+  FPointImage := nil;
 end;
 
 Procedure TCustomShapesLayer.SetPointRenderSize(PointRenderSize: Integer);
@@ -386,32 +412,64 @@ begin
   if FPointRenderStyle < rsBitmap then FPointRenderSize := PointRenderSize;
 end;
 
+Procedure TCustomShapesLayer.LoadPointResource(const ResourceId: Integer);
+// The symbols are RT_BITMAP resources, which hold a DIB without the file header
+// a decoder expects, so the 14-byte BITMAPFILEHEADER is put back in front.
+Var
+  Header: TBitmapFileHeader;
+begin
+  var Stream := TResourceStream.CreateFromID(HInstance,ResourceId,RT_BITMAP);
+  try
+    var Dib: TBytes;
+    SetLength(Dib,Stream.Size);
+    Stream.ReadBuffer(Dib[0],Stream.Size);
+    var Info := PBitmapInfoHeader(@Dib[0])^;
+    var ColorTableEntries := Info.biClrUsed;
+    if (ColorTableEntries = 0) and (Info.biBitCount <= 8) then
+    ColorTableEntries := 1 shl Info.biBitCount;
+    Header.bfType := $4D42; // 'BM'
+    Header.bfSize := SizeOf(Header)+Length(Dib);
+    Header.bfReserved1 := 0;
+    Header.bfReserved2 := 0;
+    Header.bfOffBits := SizeOf(Header)+Info.biSize+4*ColorTableEntries;
+    SetLength(FPointImageBytes,SizeOf(Header)+Length(Dib));
+    Move(Header,FPointImageBytes[0],SizeOf(Header));
+    Move(Dib[0],FPointImageBytes[SizeOf(Header)],Length(Dib));
+    FPointRenderSize := Info.biWidth;
+  finally
+    Stream.Free;
+  end;
+  FPointImage := nil;
+end;
+
 Procedure TCustomShapesLayer.SetPointRenderStyle(PointRenderStyle: TPointRenderStyle);
 begin
   FPointRenderStyle := PointRenderStyle;
   if FPointRenderStyle = rsBitmap then
   begin
-    if FPointBitmap.Empty then
-      InitPointRenderStyle
-    else
-      FPointRenderSize := FPointBitmap.Width
+    if Length(FPointImageBytes) = 0 then InitPointRenderStyle;
   end;
-  if FPointRenderStyle > rsBitmap then
+  if FPointRenderStyle > rsBitmap then LoadPointResource(96+Ord(PointRenderStyle));
+end;
+
+Procedure TCustomShapesLayer.SetPointImageBytes(const Bytes: TBytes);
+begin
+  FPointImageBytes := Bytes;
+  FPointImage := nil;
+  if (FPointRenderStyle >= rsBitmap) and (Length(FPointImageBytes) = 0) then InitPointRenderStyle;
+end;
+
+Function TCustomShapesLayer.PointImage(const Canvas: IGISCanvas): IGISImage;
+begin
+  if Length(FPointImageBytes) = 0 then Exit(nil);
+  // Decoding belongs to the canvas, so the image is rebuilt when a different
+  // canvas (a different back end) asks for it.
+  if (FPointImage = nil) or (FPointImageOwner <> Pointer(Canvas)) then
   begin
-    FPointBitmap.LoadFromResourceId(HInstance,96+Ord(PointRenderStyle));
-    FPointBitmap.Transparent := true;
-    FPointRenderSize := FPointBitmap.Width;
+    FPointImage := Canvas.CreateImage(FPointImageBytes);
+    FPointImageOwner := Pointer(Canvas);
   end;
-end;
-
-Procedure TCustomShapesLayer.SetPointBitmap(PointBitmap: TBitmap);
-begin
-  FPointBitmap.Assign(PointBitmap);
-end;
-
-Procedure TCustomShapesLayer.PointBitmapChange(sender: TObject);
-begin
-  if (FPointRenderStyle >= rsBitmap) and FPointBitmap.Empty then InitPointRenderStyle;
+  Result := FPointImage;
 end;
 
 Function TCustomShapesLayer.ShapeLabel(const Shape: Integer): String;
@@ -424,8 +482,9 @@ begin
   Result := true;
 end;
 
-Procedure TCustomShapesLayer.SetPaintStyle(const Shape: Integer; const Canvas: TCanvas);
+Function TCustomShapesLayer.ShapeStyle(const Shape: Integer): TGISShapeStyle;
 begin
+  Result := FStyle;
 end;
 
 Function TCustomShapesLayer.PaintBoundingBox: TCoordinateRect;
@@ -436,44 +495,30 @@ begin
   Result.Enclose(ShapeRenderer(Shape).BoundingBox);
 end;
 
-Procedure TCustomShapesLayer.DrawLayer(const Canvas: TCanvas;
-                                       const PixelConverter: TCustomPixelConverter;
-                                       const Width,Height: Integer);
+Procedure TCustomShapesLayer.DrawLayer(const Canvas: IGISCanvas;
+                                       const PixelConverter: TCustomPixelConverter);
 begin
   Viewport := PixelConverter.GetViewport;
-  PolygonBitmap.SetSize(Width,Height);
-  PolygonBitmap.Canvas.Pen := Canvas.Pen;
-  PolygonBitmap.Canvas.Brush := Canvas.Brush;
   for var Shape := 0 to FCount-1 do
   if PaintShape(Shape) then
   begin
     var ShpRenderer := ShapeRenderer(Shape);
     if Viewport.IntersectsWith(ShpRenderer.BoundingBox) then
-    begin
-      var ShpLabel := ShapeLabel(Shape);
-      SetPaintStyle(Shape,Canvas);
-      ShpRenderer.Draw(ShpLabel,Canvas,PixelConverter);
-    end;
+    ShpRenderer.Draw(ShapeLabel(Shape),Canvas,ShapeStyle(Shape),PixelConverter);
   end;
-end;
-
-Procedure TCustomShapesLayer.DrawLayer(const Bitmap: TBitmap; const PixelConverter: TCustomPixelConverter);
-begin
-  DrawLayer(Bitmap.Canvas,PixelConverter,Bitmap.Width,Bitmap.Height);
 end;
 
 Destructor TCustomShapesLayer.Destroy;
 begin
-  FPointBitmap.Free;
-  PolygonBitmap.Free;
+  FPointImage := nil;
   inherited Destroy;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Constructor TShapesLayer.Create(const TransparentColor: TColor; InitialCapacity: Integer = 256);
+Constructor TShapesLayer.Create(InitialCapacity: Integer = 256);
 begin
-  inherited Create(TransparentColor);
+  inherited Create;
   SetLength(ShapeRenderers,InitialCapacity);
 end;
 

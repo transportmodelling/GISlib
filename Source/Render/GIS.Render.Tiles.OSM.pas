@@ -12,21 +12,21 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  SysUtils, Graphics, PngImage, GIS.Render.Tiles;
+  SysUtils, GIS.Render.Tiles;
 
 Type
   TOpenStreetMapLayer = Class(TCustomTilesLayer)
   strict protected
-    Function GetTile(Level,Xindex,Yindex: Integer): TGraphic; override;
+    Function GetTile(Level,Xindex,Yindex: Integer): TBytes; override;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-Function TOpenStreetMapLayer.GetTile(Level,Xindex,Yindex: Integer): TGraphic;
+Function TOpenStreetMapLayer.GetTile(Level,Xindex,Yindex: Integer): TBytes;
 begin
-  Result := DownloadTile<TPngImage>('https://tile.openstreetmap.org/' +
+  Result := DownloadTile('https://tile.openstreetmap.org/' +
                          Level.ToString + '/' +
                          Xindex.ToString + '/'+
                          YIndex.ToString + '.png');

@@ -271,7 +271,7 @@ begin
   SetLength(Result, 0);
   CS := SelectCoordSystem(ACoordSystems);
   if CS = nil then Exit;
-  Shapes := TShapesLayer.Create(clMaroon);
+  Shapes := TShapesLayer.Create;
   Shapes.Read(AFileName, TESRIShapeFileReader);
   SetLength(Result, 1);
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
@@ -309,7 +309,7 @@ begin
   SetLength(Result, 0);
   CS := SelectCoordSystem(ACoordSystems);
   if CS = nil then Exit;
-  Shapes := TShapesLayer.Create(clMaroon);
+  Shapes := TShapesLayer.Create;
   Shapes.Read(AFileName, TGeoJSONReader);
   SetLength(Result, 1);
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
@@ -440,7 +440,7 @@ begin
   try
     Reader := Pkg.CreateReader(LayerName);
     try
-      Shapes := TShapesLayer.Create(clMaroon);
+      Shapes := TShapesLayer.Create;
       while Reader.ReadShape(Shape, Props) do
         Shapes.Add(Shape);
       SetLength(Result, 1);
