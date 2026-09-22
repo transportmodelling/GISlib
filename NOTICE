@@ -1,0 +1,29 @@
+GISlib
+Copyright (c) 2020 Jaap Baak
+
+GISlib itself is distributed under the MIT License; see LICENSE.
+
+This product bundles third-party material, listed below.
+
+--------------------------------------------------------------------------------
+Material Icons
+https://github.com/google/material-design-icons
+Copyright (c) Google Inc.
+Licensed under the Apache License, Version 2.0:
+http://www.apache.org/licenses/LICENSE-2.0
+
+The built-in point symbols in Source/Render/Symbols are taken from this project:
+
+    Source/Render/Symbols/Station_18dp.png   train, 18dp
+    Source/Render/Symbols/Station_24dp.png   train, 24dp
+    Source/Render/Symbols/Station_36dp.png   train, 36dp
+    Source/Render/Symbols/Station_48dp.png   train, 48dp
+    Source/Render/Symbols/Airport_18dp.png   flight, 18dp
+    Source/Render/Symbols/Airport_24dp.png   flight, 24dp
+    Source/Render/Symbols/Airport_36dp.png   flight, 36dp
+    Source/Render/Symbols/Airport_48dp.png   flight, 48dp
+
+Changes made to these files: they were renamed from the upstream
+baseline_<name>_black_<size>dp.png convention, and their white background was
+replaced by a transparent alpha channel. The glyphs themselves are unaltered.
+--------------------------------------------------------------------------------

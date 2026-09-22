@@ -97,6 +97,12 @@ The repository includes a demo application that exercises the full library:
 [Utils](https://github.com/transportmodelling/Utils) repository.
 Clone it and add it to your Delphi Library path.
 
+**Built-in point symbols** are Google Material Icons, licensed under the Apache
+License 2.0; see `NOTICE` for the attribution. They are compiled into
+`Source\Render\GIS.Symbols.res` from the PNGs
+in `Source\Render\Symbols` by `brcc32 GIS.Symbols.rc`; edit the PNGs, not the
+`.res`. Supplying your own symbol needs none of this — set `PointImageBytes`.
+
 **GeoPackage support** requires FireDAC with the SQLite driver
 (`FireDAC.Phys.SQLite`). By default this dynamically loads SQLite3.dll, which
 must be present alongside the executable. For a self-contained binary, add

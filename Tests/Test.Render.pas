@@ -103,6 +103,7 @@ type
     [Test] procedure Donut_HoleIsNotFilled;
     [Test] procedure Donut_OutsideIsUntouched;
     [Test] procedure PointSymbol_ResourceLoads;
+    [Test] procedure PointSymbol_EveryBuiltInStyleLoads;
     [Test] procedure PointSymbol_SetsRenderSizeFromImage;
     [Test] procedure PointSymbol_Draws;
     [Test] procedure DefaultStyleIsOpaque;
@@ -496,12 +497,27 @@ begin
 end;
 
 procedure TShapesLayerRenderTests.PointSymbol_ResourceLoads;
-// The built-in symbols are RT_BITMAP resources, which hold a DIB with no file
-// header, so the layer has to put a BITMAPFILEHEADER back in front of them.
+// The built-in symbols are PNGs held as RCDATA, so they arrive ready to decode
+// and carry their own alpha; nothing here is Windows-specific.
 begin
   FLayer.PointRenderStyle := rsStation_24dp;
-  Assert.IsTrue(Length(FLayer.PointImageBytes) > 0,'symbol bytes should be loaded');
-  Assert.AreEqual(Word($4D42),PWord(@FLayer.PointImageBytes[0])^,'should start with the BM signature');
+  Assert.IsTrue(Length(FLayer.PointImageBytes) > 8,'symbol bytes should be loaded');
+  Assert.AreEqual($89,Integer(FLayer.PointImageBytes[0]),'should start with the PNG signature');
+  Assert.AreEqual(Ord('P'),Integer(FLayer.PointImageBytes[1]));
+  Assert.AreEqual(Ord('N'),Integer(FLayer.PointImageBytes[2]));
+  Assert.AreEqual(Ord('G'),Integer(FLayer.PointImageBytes[3]));
+end;
+
+procedure TShapesLayerRenderTests.PointSymbol_EveryBuiltInStyleLoads;
+// Guards the resource names against a typo: each style must find its PNG and
+// report the size its name promises.
+begin
+  for var Style := rsStation_18dp to rsAirport_48dp do
+  begin
+    FLayer.PointRenderStyle := Style;
+    Assert.IsTrue(Length(FLayer.PointImageBytes) > 8,
+      Format('style %d should load symbol bytes',[Ord(Style)]));
+  end;
 end;
 
 procedure TShapesLayerRenderTests.PointSymbol_SetsRenderSizeFromImage;

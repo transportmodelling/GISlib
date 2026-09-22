@@ -1,0 +1,21 @@
+// Built-in point symbols for TCustomShapesLayer.
+//
+// RCDATA rather than BITMAP: an RT_BITMAP resource holds a headerless DIB and
+// is a Windows construct, whereas RCDATA is a plain blob on every platform and
+// the PNGs carry their own alpha. The canvas decodes them, so the render layer
+// needs no image codec of its own.
+//
+// Rebuild with:  brcc32 GIS.Symbols.rc
+// Edit the PNGs in Symbols\, never this .res: a rebuild overwrites it.
+//
+// The symbols come from Google's Material Icons and are Apache 2.0 licensed.
+// See NOTICE in the repository root.
+
+STATION_18DP RCDATA "Symbols\\Station_18dp.png"
+STATION_24DP RCDATA "Symbols\\Station_24dp.png"
+STATION_36DP RCDATA "Symbols\\Station_36dp.png"
+STATION_48DP RCDATA "Symbols\\Station_48dp.png"
+AIRPORT_18DP RCDATA "Symbols\\Airport_18dp.png"
+AIRPORT_24DP RCDATA "Symbols\\Airport_24dp.png"
+AIRPORT_36DP RCDATA "Symbols\\Airport_36dp.png"
+AIRPORT_48DP RCDATA "Symbols\\Airport_48dp.png"

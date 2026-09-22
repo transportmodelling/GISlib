@@ -39,7 +39,8 @@ Type
     Procedure SetPointRenderStyle(PointRenderStyle: TPointRenderStyle);
     Procedure SetPointImageBytes(const Bytes: TBytes);
     Function PointImage(const Canvas: IGISCanvas): IGISImage;
-    Procedure LoadPointResource(const ResourceId: Integer);
+    Procedure LoadPointResource(const ResourceName: String);
+    Class Function PngWidth(const Bytes: TBytes): Integer; static;
   strict protected
     Type
       TShapeRenderer = Class
@@ -158,30 +159,14 @@ implementation
 ////////////////////////////////////////////////////////////////////////////////
 
 {$R GIS.res}
-
-Type
-  // Declared here rather than taken from Winapi.Windows, so this unit keeps to
-  // the RTL. The symbols are still Windows resources; a non-Windows back end
-  // would supply them through PointImageBytes instead.
-  TBitmapFileHeader = packed record
-    bfType: Word;
-    bfSize: Cardinal;
-    bfReserved1,bfReserved2: Word;
-    bfOffBits: Cardinal;
-  end;
-
-  TBitmapInfoHeader = packed record
-    biSize: Cardinal;
-    biWidth,biHeight: Integer;
-    biPlanes,biBitCount: Word;
-    biCompression,biSizeImage: Cardinal;
-    biXPelsPerMeter,biYPelsPerMeter: Integer;
-    biClrUsed,biClrImportant: Cardinal;
-  end;
-  PBitmapInfoHeader = ^TBitmapInfoHeader;
+{$R GIS.Symbols.res}
 
 Const
-  RT_BITMAP = PChar(2);
+  // The symbols are PNGs held as RCDATA, which is a plain blob on every
+  // platform, so nothing here is Windows-specific.
+  PointSymbolResources: array[rsStation_18dp..rsAirport_48dp] of String = (
+    'STATION_18DP','STATION_24DP','STATION_36DP','STATION_48DP',
+    'AIRPORT_18DP','AIRPORT_24DP','AIRPORT_36DP','AIRPORT_48DP');
 
 Procedure TCustomShapesLayer.TShapeRenderer.WriteLabelPositions(const Writer: TBinaryWriter);
 begin
@@ -412,33 +397,29 @@ begin
   if FPointRenderStyle < rsBitmap then FPointRenderSize := PointRenderSize;
 end;
 
-Procedure TCustomShapesLayer.LoadPointResource(const ResourceId: Integer);
-// The symbols are RT_BITMAP resources, which hold a DIB without the file header
-// a decoder expects, so the 14-byte BITMAPFILEHEADER is put back in front.
-Var
-  Header: TBitmapFileHeader;
+Class Function TCustomShapesLayer.PngWidth(const Bytes: TBytes): Integer;
+// The width sits in the IHDR chunk, which a PNG always puts first: an 8-byte
+// signature, then the chunk length and type, then the width as a big-endian
+// 32-bit value. Read here so PointRenderSize is known without decoding.
+Const
+  Signature: array[0..7] of Byte = ($89,$50,$4E,$47,$0D,$0A,$1A,$0A);
 begin
-  var Stream := TResourceStream.CreateFromID(HInstance,ResourceId,RT_BITMAP);
+  if Length(Bytes) < 24 then raise Exception.Create('Point symbol is not a PNG');
+  for var Index := low(Signature) to high(Signature) do
+  if Bytes[Index] <> Signature[Index] then raise Exception.Create('Point symbol is not a PNG');
+  Result := (Bytes[16] shl 24) or (Bytes[17] shl 16) or (Bytes[18] shl 8) or Bytes[19];
+end;
+
+Procedure TCustomShapesLayer.LoadPointResource(const ResourceName: String);
+begin
+  var Stream := TResourceStream.Create(HInstance,ResourceName,RT_RCDATA);
   try
-    var Dib: TBytes;
-    SetLength(Dib,Stream.Size);
-    Stream.ReadBuffer(Dib[0],Stream.Size);
-    var Info := PBitmapInfoHeader(@Dib[0])^;
-    var ColorTableEntries := Info.biClrUsed;
-    if (ColorTableEntries = 0) and (Info.biBitCount <= 8) then
-    ColorTableEntries := 1 shl Info.biBitCount;
-    Header.bfType := $4D42; // 'BM'
-    Header.bfSize := SizeOf(Header)+Length(Dib);
-    Header.bfReserved1 := 0;
-    Header.bfReserved2 := 0;
-    Header.bfOffBits := SizeOf(Header)+Info.biSize+4*ColorTableEntries;
-    SetLength(FPointImageBytes,SizeOf(Header)+Length(Dib));
-    Move(Header,FPointImageBytes[0],SizeOf(Header));
-    Move(Dib[0],FPointImageBytes[SizeOf(Header)],Length(Dib));
-    FPointRenderSize := Info.biWidth;
+    SetLength(FPointImageBytes,Stream.Size);
+    if Stream.Size > 0 then Stream.ReadBuffer(FPointImageBytes[0],Stream.Size);
   finally
     Stream.Free;
   end;
+  FPointRenderSize := PngWidth(FPointImageBytes);
   FPointImage := nil;
 end;
 
@@ -449,7 +430,7 @@ begin
   begin
     if Length(FPointImageBytes) = 0 then InitPointRenderStyle;
   end;
-  if FPointRenderStyle > rsBitmap then LoadPointResource(96+Ord(PointRenderStyle));
+  if FPointRenderStyle > rsBitmap then LoadPointResource(PointSymbolResources[FPointRenderStyle]);
 end;
 
 Procedure TCustomShapesLayer.SetPointImageBytes(const Bytes: TBytes);

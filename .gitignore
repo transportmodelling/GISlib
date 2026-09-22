@@ -5,6 +5,7 @@
 # They can not be viewed as text or compared by diff-tools. Consider replacing them with .rc files.
 *.res
 !Source/Render/GIS.res
+!Source/Render/GIS.Symbols.res
 !Demo/GIS.Cursor.res
 #
 # Type library file (binary). In old Delphi versions it should be stored.
