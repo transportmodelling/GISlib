@@ -78,36 +78,35 @@ type
     NextView: TAction;
     PreviousViewToolButton: TToolButton;
     NextViewToolButton: TToolButton;
-    procedure AddLayerAccept(Sender: TObject);
-    procedure FormCreate(Sender: TObject);
-    procedure ZoomInExecute(Sender: TObject);
-    procedure ZoomOutExecute(Sender: TObject);
-    procedure PanExecute(Sender: TObject);
-    procedure ZoomAllExecute(Sender: TObject);
-    procedure ShowOSMExecute(Sender: TObject);
-    procedure FormShow(Sender: TObject);
-    procedure FormResize(Sender: TObject);
-    procedure PaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
-    procedure PaintBoxMouseMove(Sender: TObject; Shift: TShiftState; X,
-      Y: Integer);
-    procedure PaintBoxMouseUp(Sender: TObject; Button: TMouseButton;
-      Shift: TShiftState; X, Y: Integer);
-    procedure PaintBoxPaint(Sender: TObject);
-    procedure FormClose(Sender: TObject; var Action: TCloseAction);
-    procedure LayerListBoxClick(Sender: TObject);
-    procedure RemoveLayerBtnClick(Sender: TObject);
-    procedure CollapseBtnClick(Sender: TObject);
-    procedure CoordSystemComboBoxChange(Sender: TObject);
-    procedure RemoveLayerExecute(Sender: TObject);
-    procedure LayerUpExecute(Sender: TObject);
-    procedure LayerDownExecute(Sender: TObject);
-    procedure SaveImageExecute(Sender: TObject);
-    procedure SaveLayerExecute(Sender: TObject);
-    procedure SaveLayersExecute(Sender: TObject);
-    procedure BackgroundColorPanelClick(Sender: TObject);
-    procedure PreviousViewExecute(Sender: TObject);
-    procedure NextViewExecute(Sender: TObject);
+    Procedure AddLayerAccept(Sender: TObject);
+    Procedure FormCreate(Sender: TObject);
+    Procedure ZoomInExecute(Sender: TObject);
+    Procedure ZoomOutExecute(Sender: TObject);
+    Procedure PanExecute(Sender: TObject);
+    Procedure ZoomAllExecute(Sender: TObject);
+    Procedure ShowOSMExecute(Sender: TObject);
+    Procedure FormShow(Sender: TObject);
+    Procedure FormResize(Sender: TObject);
+    Procedure PaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
+                                Shift: TShiftState; X, Y: Integer);
+    Procedure PaintBoxMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    Procedure PaintBoxMouseUp(Sender: TObject; Button: TMouseButton;
+                              Shift: TShiftState; X, Y: Integer);
+    Procedure PaintBoxPaint(Sender: TObject);
+    Procedure FormClose(Sender: TObject; var Action: TCloseAction);
+    Procedure LayerListBoxClick(Sender: TObject);
+    Procedure RemoveLayerBtnClick(Sender: TObject);
+    Procedure CollapseBtnClick(Sender: TObject);
+    Procedure CoordSystemComboBoxChange(Sender: TObject);
+    Procedure RemoveLayerExecute(Sender: TObject);
+    Procedure LayerUpExecute(Sender: TObject);
+    Procedure LayerDownExecute(Sender: TObject);
+    Procedure SaveImageExecute(Sender: TObject);
+    Procedure SaveLayerExecute(Sender: TObject);
+    Procedure SaveLayersExecute(Sender: TObject);
+    Procedure BackgroundColorPanelClick(Sender: TObject);
+    Procedure PreviousViewExecute(Sender: TObject);
+    Procedure NextViewExecute(Sender: TObject);
   private
     Const
       crZoomIn  = 1;
@@ -140,9 +139,9 @@ type
     Procedure OpenShapeFile(const FileName: String);
   public
     Procedure AddGISLayer(const ALayer: TLayer);
-    procedure WMDropFiles(var msg: TWMDropFiles); message WM_DROPFILES;
-    procedure WMSize(var Message: TWMSize); message WM_SIZE;
-    procedure WMExitSizeMove(var Message: TMessage); message WM_EXITSIZEMOVE;
+    Procedure WMDropFiles(var msg: TWMDropFiles); message WM_DROPFILES;
+    Procedure WMSize(var Message: TWMSize); message WM_SIZE;
+    Procedure WMExitSizeMove(var Message: TMessage); message WM_EXITSIZEMOVE;
   end;
 
 var
@@ -253,7 +252,7 @@ begin
   if Result.Empty then Result := WorldBBox;
 end;
 
-procedure TMainForm.CoordSystemComboBoxChange(Sender: TObject);
+Procedure TMainForm.CoordSystemComboBoxChange(Sender: TObject);
 var
   Idx: Integer;
 begin
@@ -347,7 +346,7 @@ end;
 // Windows messages
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure TMainForm.WMDropFiles(var msg: TWMDropFiles);
+Procedure TMainForm.WMDropFiles(var msg: TWMDropFiles);
 const
   MaxFileName = 255;
 var
@@ -358,13 +357,13 @@ begin
   DragFinish(msg.Drop);
 end;
 
-procedure TMainForm.WMSize(var Message: TWMSize);
+Procedure TMainForm.WMSize(var Message: TWMSize);
 begin
   inherited;
   if Message.SizeType = SIZE_MAXIMIZED then FormResize(nil);
 end;
 
-procedure TMainForm.WMExitSizeMove(var Message: TMessage);
+Procedure TMainForm.WMExitSizeMove(var Message: TMessage);
 begin
   FormResize(nil);
 end;
@@ -373,7 +372,7 @@ end;
 // Form lifecycle
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure TMainForm.FormCreate(Sender: TObject);
+Procedure TMainForm.FormCreate(Sender: TObject);
 begin
   TFDGUIxWaitCursor.Create(Self);  // required by FireDAC; owned by form
   GISToolBar.DisabledImages    := CreateDisabledImages(ImageList);  // owned by the form
@@ -429,19 +428,19 @@ begin
   ShowOSMExecute(nil);
 end;
 
-procedure TMainForm.FormShow(Sender: TObject);
+Procedure TMainForm.FormShow(Sender: TObject);
 begin
   UpdateMinHeight;
   ZoomAllExecute(nil);
 end;
 
-procedure TMainForm.FormResize(Sender: TObject);
+Procedure TMainForm.FormResize(Sender: TObject);
 begin
   if (Layers.Count > 0) or ShowOSM.Checked then
     PaintBox.Invalidate;
 end;
 
-procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
+Procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
   ShapesImage.Free;
   LayerImage.Free;
@@ -464,7 +463,7 @@ begin
 end;
 
 
-procedure TMainForm.RemoveLayerExecute(Sender: TObject);
+Procedure TMainForm.RemoveLayerExecute(Sender: TObject);
 begin
   var Idx := LayerListBox.ItemIndex;
   if (Idx >= 0) and (Idx < Layers.Count) then
@@ -479,7 +478,7 @@ begin
   end;
 end;
 
-procedure TMainForm.SaveImageExecute(Sender: TObject);
+Procedure TMainForm.SaveImageExecute(Sender: TObject);
 var
   Dlg: TSaveDialog;
 begin
@@ -508,7 +507,7 @@ begin
   end;
 end;
 
-procedure TMainForm.SaveLayerExecute(Sender: TObject);
+Procedure TMainForm.SaveLayerExecute(Sender: TObject);
 var
   Idx: Integer;
   Writable: TArray<TGISFileFormat>;
@@ -539,7 +538,7 @@ begin
   end;
 end;
 
-procedure TMainForm.SaveLayersExecute(Sender: TObject);
+Procedure TMainForm.SaveLayersExecute(Sender: TObject);
 var
   MultiLayer: TArray<TGISFileFormat>;
   Filter: String;
@@ -571,7 +570,7 @@ begin
   end;
 end;
 
-procedure TMainForm.LayerUpExecute(Sender: TObject);
+Procedure TMainForm.LayerUpExecute(Sender: TObject);
 var
   Idx: Integer;
   Tmp: String;
@@ -589,7 +588,7 @@ begin
   end;
 end;
 
-procedure TMainForm.LayerDownExecute(Sender: TObject);
+Procedure TMainForm.LayerDownExecute(Sender: TObject);
 var
   Idx: Integer;
   Tmp: String;
@@ -607,7 +606,7 @@ begin
   end;
 end;
 
-procedure TMainForm.CollapseBtnClick(Sender: TObject);
+Procedure TMainForm.CollapseBtnClick(Sender: TObject);
 begin
   if LayerPanel.Width > CollapseBtn.Width then
   begin
@@ -622,11 +621,11 @@ begin
   end;
 end;
 
-procedure TMainForm.RemoveLayerBtnClick(Sender: TObject);
+Procedure TMainForm.RemoveLayerBtnClick(Sender: TObject);
 begin
 end;
 
-procedure TMainForm.BackgroundColorPanelClick(Sender: TObject);
+Procedure TMainForm.BackgroundColorPanelClick(Sender: TObject);
 var
   Dlg: TColorDialog;
 begin
@@ -649,7 +648,7 @@ end;
 // View actions
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure TMainForm.ZoomInExecute(Sender: TObject);
+Procedure TMainForm.ZoomInExecute(Sender: TObject);
 begin
   MouseDown := false;
   ZoomIn.Checked := not ZoomIn.Checked;
@@ -664,7 +663,7 @@ begin
   end;
 end;
 
-procedure TMainForm.ZoomOutExecute(Sender: TObject);
+Procedure TMainForm.ZoomOutExecute(Sender: TObject);
 begin
   MouseDown := false;
   ZoomOut.Checked := not ZoomOut.Checked;
@@ -679,7 +678,7 @@ begin
   end;
 end;
 
-procedure TMainForm.PanExecute(Sender: TObject);
+Procedure TMainForm.PanExecute(Sender: TObject);
 begin
   MouseDown := false;
   Pan.Checked := not Pan.Checked;
@@ -694,7 +693,7 @@ begin
   end;
 end;
 
-procedure TMainForm.ZoomAllExecute(Sender: TObject);
+Procedure TMainForm.ZoomAllExecute(Sender: TObject);
 var
   BBox: TCoordinateRect;
 begin
@@ -711,7 +710,7 @@ begin
   PaintBox.Invalidate;
 end;
 
-procedure TMainForm.PreviousViewExecute(Sender: TObject);
+Procedure TMainForm.PreviousViewExecute(Sender: TObject);
 begin
   MouseDown := false;
   if MercatorConverter.Previous then  // OnChange syncs the layers
@@ -722,7 +721,7 @@ begin
   end;
 end;
 
-procedure TMainForm.NextViewExecute(Sender: TObject);
+Procedure TMainForm.NextViewExecute(Sender: TObject);
 begin
   MouseDown := false;
   if MercatorConverter.Next then  // OnChange syncs the layers
@@ -733,7 +732,7 @@ begin
   end;
 end;
 
-procedure TMainForm.ShowOSMExecute(Sender: TObject);
+Procedure TMainForm.ShowOSMExecute(Sender: TObject);
 begin
   MouseDown := false;
   ShowOSM.Checked := not ShowOSM.Checked;
@@ -746,15 +745,14 @@ end;
 // Mouse handlers
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure TMainForm.PaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
+Procedure TMainForm.PaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
+                                      Shift: TShiftState; X, Y: Integer);
 begin
   MouseDown := true;
   StartPosition := MousePosition;
 end;
 
-procedure TMainForm.PaintBoxMouseMove(Sender: TObject; Shift: TShiftState; X,
-  Y: Integer);
+Procedure TMainForm.PaintBoxMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
 begin
   // Erase rubber band
   if MouseDown and (ZoomStyle = zsZoomIn) then
@@ -788,8 +786,8 @@ begin
   end;
 end;
 
-procedure TMainForm.PaintBoxMouseUp(Sender: TObject; Button: TMouseButton;
-  Shift: TShiftState; X, Y: Integer);
+Procedure TMainForm.PaintBoxMouseUp(Sender: TObject; Button: TMouseButton;
+                                    Shift: TShiftState; X, Y: Integer);
 begin
   if MouseDown and (ZoomStyle <> zsNone) then
   begin
@@ -825,7 +823,7 @@ end;
 // Paint
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure TMainForm.PaintBoxPaint(Sender: TObject);
+Procedure TMainForm.PaintBoxPaint(Sender: TObject);
 var
   X,Y: Integer;
   OSMActive: Boolean;
@@ -938,7 +936,7 @@ begin
   end;
 end;
 
-procedure TMainForm.AddLayerAccept(Sender: TObject);
+Procedure TMainForm.AddLayerAccept(Sender: TObject);
 begin
   OpenShapeFile(AddLayer.Dialog.FileName);
 end;

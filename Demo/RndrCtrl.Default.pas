@@ -43,18 +43,18 @@ type
     LabelSourceCombo: TComboBox;
     TextColorPanel: TPanel;
     TextSizeSpinEdit: TSpinEdit;
-    procedure VisibleCheckBoxClick(Sender: TObject);
-    procedure OpacityTrackBarChange(Sender: TObject);
-    procedure PenColorPanelClick(Sender: TObject);
-    procedure PenStyleComboChange(Sender: TObject);
-    procedure PenWidthSpinEditChange(Sender: TObject);
-    procedure BrushColorPanelClick(Sender: TObject);
-    procedure BrushStyleComboChange(Sender: TObject);
-    procedure PointComboBoxChange(Sender: TObject);
-    procedure PointSizeSpinEditChange(Sender: TObject);
-    procedure LabelSourceComboChange(Sender: TObject);
-    procedure TextColorPanelClick(Sender: TObject);
-    procedure TextSizeSpinEditChange(Sender: TObject);
+    Procedure VisibleCheckBoxClick(Sender: TObject);
+    Procedure OpacityTrackBarChange(Sender: TObject);
+    Procedure PenColorPanelClick(Sender: TObject);
+    Procedure PenStyleComboChange(Sender: TObject);
+    Procedure PenWidthSpinEditChange(Sender: TObject);
+    Procedure BrushColorPanelClick(Sender: TObject);
+    Procedure BrushStyleComboChange(Sender: TObject);
+    Procedure PointComboBoxChange(Sender: TObject);
+    Procedure PointSizeSpinEditChange(Sender: TObject);
+    Procedure LabelSourceComboChange(Sender: TObject);
+    Procedure TextColorPanelClick(Sender: TObject);
+    Procedure TextSizeSpinEditChange(Sender: TObject);
   private
     Const
       // The styles offered, in the order of PointComboBox's items. rsBitmap is
@@ -148,7 +148,7 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.VisibleCheckBoxClick(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.VisibleCheckBoxClick(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -157,7 +157,7 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.OpacityTrackBarChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.OpacityTrackBarChange(Sender: TObject);
 begin
   if (Layer <> nil) and (OpacityTrackbar.Position <> Layer.Opacity) then
   begin
@@ -166,12 +166,12 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.PenColorPanelClick(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.PenColorPanelClick(Sender: TObject);
 begin
   if (Layer <> nil) and SelectColor(PenColorPanel,Layer.PenColor) then Changed;
 end;
 
-procedure TDefaultLayerRenderingControl.PenStyleComboChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.PenStyleComboChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -180,7 +180,7 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.PenWidthSpinEditChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.PenWidthSpinEditChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -189,7 +189,7 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.PointComboBoxChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.PointComboBoxChange(Sender: TObject);
 begin
   if (Layer <> nil) and (PointComboBox.ItemIndex >= 0) then
   begin
@@ -201,7 +201,7 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.PointSizeSpinEditChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.PointSizeSpinEditChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -210,12 +210,12 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.BrushColorPanelClick(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.BrushColorPanelClick(Sender: TObject);
 begin
   if (Layer <> nil) and SelectColor(BrushColorPanel,Layer.BrushColor) then Changed;
 end;
 
-procedure TDefaultLayerRenderingControl.BrushStyleComboChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.BrushStyleComboChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -224,7 +224,7 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.LabelSourceComboChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.LabelSourceComboChange(Sender: TObject);
 begin
   if (Layer <> nil) and (LabelSourceCombo.ItemIndex >= 0) then
   begin
@@ -233,12 +233,12 @@ begin
   end;
 end;
 
-procedure TDefaultLayerRenderingControl.TextColorPanelClick(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.TextColorPanelClick(Sender: TObject);
 begin
   if (Layer <> nil) and SelectColor(TextColorPanel,Layer.TextColor) then Changed;
 end;
 
-procedure TDefaultLayerRenderingControl.TextSizeSpinEditChange(Sender: TObject);
+Procedure TDefaultLayerRenderingControl.TextSizeSpinEditChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin

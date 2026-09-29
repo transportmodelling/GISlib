@@ -23,16 +23,16 @@ type
   private
     FConv: TWgs84CoordinateConverter;
   public
-    [Setup]    procedure Setup;
-    [TearDown] procedure TearDown;
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
 
-    [Test] procedure CoordToGeodeticCoord_IsIdentity;
-    [Test] procedure GeodeticCoordToCoord_IsIdentity;
-    [Test] procedure RoundTrip_Coord;
-    [Test] procedure MetersPerUnit_IsApproximately111320;
-    [Test] procedure SRID_Is4326;
-    [Test] procedure SRSName_IsWGS84;
-    [Test] procedure SRSDefinition_ContainsGeogCS;
+    [Test] Procedure CoordToGeodeticCoord_IsIdentity;
+    [Test] Procedure GeodeticCoordToCoord_IsIdentity;
+    [Test] Procedure RoundTrip_Coord;
+    [Test] Procedure MetersPerUnit_IsApproximately111320;
+    [Test] Procedure SRID_Is4326;
+    [Test] Procedure SRSName_IsWGS84;
+    [Test] Procedure SRSDefinition_ContainsGeogCS;
   end;
 
   [TestFixture]
@@ -40,17 +40,17 @@ type
   private
     FConv: TDutchGridCoordinateConverter;
   public
-    [Setup]    procedure Setup;
-    [TearDown] procedure TearDown;
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
 
-    [Test] procedure MetersPerUnit_IsOne;
+    [Test] Procedure MetersPerUnit_IsOne;
     // Amersfoort (RD datum point): Dutch Grid (155000, 463000) ~ WGS84 (5.3872 deg, 52.1552 deg)
-    [Test] procedure AmersfoortDutchGrid_ConvertsToCorrectGeodetic;
+    [Test] Procedure AmersfoortDutchGrid_ConvertsToCorrectGeodetic;
     // Converting DG -> geodetic -> DG should recover the original within 2 cm
-    [Test] procedure RoundTrip_WithinCentimeterAccuracy;
-    [Test] procedure SRID_Is28992;
-    [Test] procedure SRSName_IsAmersfoort;
-    [Test] procedure SRSDefinition_ContainsOblique;
+    [Test] Procedure RoundTrip_WithinCentimeterAccuracy;
+    [Test] Procedure SRID_Is28992;
+    [Test] Procedure SRSName_IsAmersfoort;
+    [Test] Procedure SRSDefinition_ContainsOblique;
   end;
 
   [TestFixture]
@@ -58,21 +58,21 @@ type
   private
     FConv: TWebMercatorCoordinateConverter;
   public
-    [Setup]    procedure Setup;
-    [TearDown] procedure TearDown;
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
 
-    [Test] procedure MetersPerUnit_IsOne;
-    [Test] procedure GeodeticCoordToCoord_OriginIsZero;
-    [Test] procedure GeodeticCoordToCoord_Longitude180_XIsHalfCircumference;
+    [Test] Procedure MetersPerUnit_IsOne;
+    [Test] Procedure GeodeticCoordToCoord_OriginIsZero;
+    [Test] Procedure GeodeticCoordToCoord_Longitude180_XIsHalfCircumference;
     // At the projection's own MaxLatitude (Y-fraction 0), Y must equal +half the
     // earth circumference - an exact identity independent of any trig hand-math.
-    [Test] procedure GeodeticCoordToCoord_AtMaxLatitude_YIsHalfCircumference;
-    [Test] procedure RoundTrip_Coord;
-    [Test] procedure LatitudeBeyondMaxLatitude_RaisesException;
-    [Test] procedure SRID_Is3857;
-    [Test] procedure SRSName_IsPseudoMercator;
-    [Test] procedure SRSDefinition_ContainsMercator1SP;
-    [Test] procedure SRSDefinition_StatesSphericalModel;
+    [Test] Procedure GeodeticCoordToCoord_AtMaxLatitude_YIsHalfCircumference;
+    [Test] Procedure RoundTrip_Coord;
+    [Test] Procedure LatitudeBeyondMaxLatitude_RaisesException;
+    [Test] Procedure SRID_Is3857;
+    [Test] Procedure SRSName_IsPseudoMercator;
+    [Test] Procedure SRSDefinition_ContainsMercator1SP;
+    [Test] Procedure SRSDefinition_StatesSphericalModel;
   end;
 
   [TestFixture]
@@ -80,24 +80,24 @@ type
   private
     FConv: TUtmCoordinateConverter; // Zone 31, North (the Netherlands)
   public
-    [Setup]    procedure Setup;
-    [TearDown] procedure TearDown;
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
 
-    [Test] procedure MetersPerUnit_IsOne;
+    [Test] Procedure MetersPerUnit_IsOne;
     // At the zone's own central meridian and the equator, X/Y must equal the
     // false easting/northing exactly - an algebraic identity, not approximation.
-    [Test] procedure GeodeticCoordToCoord_AtCentralMeridianEquator_IsFalseOrigin;
-    [Test] procedure GeodeticCoordToCoord_Amsterdam_MatchesProj;
-    [Test] procedure RoundTrip_Coord;
-    [Test] procedure RoundTrip_SouthernHemisphere;
-    [Test] procedure InvalidZoneTooLow_RaisesException;
-    [Test] procedure InvalidZoneTooHigh_RaisesException;
-    [Test] procedure SRID_Zone31North_Is32631;
-    [Test] procedure SRID_Zone31South_Is32731;
-    [Test] procedure SRID_Zone1North_Is32601;
-    [Test] procedure SRID_Zone60South_Is32760;
-    [Test] procedure SRSName_ContainsZoneAndHemisphere;
-    [Test] procedure SRSDefinition_ContainsTransverseMercator;
+    [Test] Procedure GeodeticCoordToCoord_AtCentralMeridianEquator_IsFalseOrigin;
+    [Test] Procedure GeodeticCoordToCoord_Amsterdam_MatchesProj;
+    [Test] Procedure RoundTrip_Coord;
+    [Test] Procedure RoundTrip_SouthernHemisphere;
+    [Test] Procedure InvalidZoneTooLow_RaisesException;
+    [Test] Procedure InvalidZoneTooHigh_RaisesException;
+    [Test] Procedure SRID_Zone31North_Is32631;
+    [Test] Procedure SRID_Zone31South_Is32731;
+    [Test] Procedure SRID_Zone1North_Is32601;
+    [Test] Procedure SRID_Zone60South_Is32760;
+    [Test] Procedure SRSName_ContainsZoneAndHemisphere;
+    [Test] Procedure SRSDefinition_ContainsTransverseMercator;
   end;
 
   [TestFixture]
@@ -106,9 +106,9 @@ type
   // override the SRS methods.  Uses a minimal concrete subclass that only
   // implements the three abstract methods.
   public
-    [Test] procedure DefaultSRID_BaseReturnsZero;
-    [Test] procedure DefaultSRSName_BaseReturnsUndefined;
-    [Test] procedure DefaultSRSDefinition_BaseReturnsUndefined;
+    [Test] Procedure DefaultSRID_BaseReturnsZero;
+    [Test] Procedure DefaultSRSName_BaseReturnsUndefined;
+    [Test] Procedure DefaultSRSDefinition_BaseReturnsUndefined;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,33 +122,33 @@ type
   // SRID/SRSName/SRSDefinition intentionally not overridden -> test base defaults.
   TMinimalConverter = class(TCoordinateConverter)
   public
-    function MetersPerUnit: Float64; override;
-    function CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate; override;
-    function GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate; override;
+    Function MetersPerUnit: Float64; override;
+    Function CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate; override;
+    Function GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate; override;
   end;
 
-function TMinimalConverter.MetersPerUnit: Float64;
+Function TMinimalConverter.MetersPerUnit: Float64;
 begin Result := 1; end;
 
-function TMinimalConverter.CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate;
+Function TMinimalConverter.CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate;
 begin Result.Longitude := Coord.X; Result.Latitude := Coord.Y; end;
 
-function TMinimalConverter.GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate;
+Function TMinimalConverter.GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate;
 begin Result.X := GeodeticCoord.Longitude; Result.Y := GeodeticCoord.Latitude; end;
 
-{ TWgs84ConverterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-procedure TWgs84ConverterTests.Setup;
+Procedure TWgs84ConverterTests.Setup;
 begin
   FConv := TWgs84CoordinateConverter.Create;
 end;
 
-procedure TWgs84ConverterTests.TearDown;
+Procedure TWgs84ConverterTests.TearDown;
 begin
   FConv.Free;
 end;
 
-procedure TWgs84ConverterTests.CoordToGeodeticCoord_IsIdentity;
+Procedure TWgs84ConverterTests.CoordToGeodeticCoord_IsIdentity;
 var
   G: TGeodeticCoordinate;
 begin
@@ -157,7 +157,7 @@ begin
   Assert.AreEqual(52.0, G.Latitude,  1e-12);
 end;
 
-procedure TWgs84ConverterTests.GeodeticCoordToCoord_IsIdentity;
+Procedure TWgs84ConverterTests.GeodeticCoordToCoord_IsIdentity;
 var
   G: TGeodeticCoordinate;
   C: TCoordinate;
@@ -168,7 +168,7 @@ begin
   Assert.AreEqual(52.37, C.Y, 1e-12);
 end;
 
-procedure TWgs84ConverterTests.RoundTrip_Coord;
+Procedure TWgs84ConverterTests.RoundTrip_Coord;
 var
   Original, Recovered: TCoordinate;
 begin
@@ -178,29 +178,29 @@ begin
   Assert.AreEqual(Original.Y, Recovered.Y, 1e-12);
 end;
 
-procedure TWgs84ConverterTests.MetersPerUnit_IsApproximately111320;
+Procedure TWgs84ConverterTests.MetersPerUnit_IsApproximately111320;
 begin
   Assert.AreEqual(111320.0, FConv.MetersPerUnit, 1.0);
 end;
 
-{ TDutchGridConverterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-procedure TDutchGridConverterTests.Setup;
+Procedure TDutchGridConverterTests.Setup;
 begin
   FConv := TDutchGridCoordinateConverter.Create;
 end;
 
-procedure TDutchGridConverterTests.TearDown;
+Procedure TDutchGridConverterTests.TearDown;
 begin
   FConv.Free;
 end;
 
-procedure TDutchGridConverterTests.MetersPerUnit_IsOne;
+Procedure TDutchGridConverterTests.MetersPerUnit_IsOne;
 begin
   Assert.AreEqual(1.0, FConv.MetersPerUnit, 1e-12);
 end;
 
-procedure TDutchGridConverterTests.AmersfoortDutchGrid_ConvertsToCorrectGeodetic;
+Procedure TDutchGridConverterTests.AmersfoortDutchGrid_ConvertsToCorrectGeodetic;
 var
   G: TGeodeticCoordinate;
 begin
@@ -211,7 +211,7 @@ begin
   Assert.AreEqual(52.15511, G.Latitude, 0.0001, 'Amersfoort latitude');
 end;
 
-procedure TDutchGridConverterTests.RoundTrip_WithinCentimeterAccuracy;
+Procedure TDutchGridConverterTests.RoundTrip_WithinCentimeterAccuracy;
 const
   // A few representative points across the Netherlands
   TestPoints: array[0..3] of array[0..1] of Double = (
@@ -237,17 +237,17 @@ end;
 
 { TWgs84ConverterTests - SRS }
 
-procedure TWgs84ConverterTests.SRID_Is4326;
+Procedure TWgs84ConverterTests.SRID_Is4326;
 begin
   Assert.AreEqual(4326, FConv.SRID);
 end;
 
-procedure TWgs84ConverterTests.SRSName_IsWGS84;
+Procedure TWgs84ConverterTests.SRSName_IsWGS84;
 begin
   Assert.IsTrue(Pos('WGS', FConv.SRSName) > 0, 'SRSName should contain "WGS"');
 end;
 
-procedure TWgs84ConverterTests.SRSDefinition_ContainsGeogCS;
+Procedure TWgs84ConverterTests.SRSDefinition_ContainsGeogCS;
 begin
   Assert.IsTrue(Pos('GEOGCS', FConv.SRSDefinition) > 0,
     'WGS84 SRSDefinition should contain "GEOGCS"');
@@ -255,41 +255,41 @@ end;
 
 { TDutchGridConverterTests - SRS }
 
-procedure TDutchGridConverterTests.SRID_Is28992;
+Procedure TDutchGridConverterTests.SRID_Is28992;
 begin
   Assert.AreEqual(28992, FConv.SRID);
 end;
 
-procedure TDutchGridConverterTests.SRSName_IsAmersfoort;
+Procedure TDutchGridConverterTests.SRSName_IsAmersfoort;
 begin
   Assert.IsTrue(Pos('Amersfoort', FConv.SRSName) > 0,
     'SRSName should contain "Amersfoort"');
 end;
 
-procedure TDutchGridConverterTests.SRSDefinition_ContainsOblique;
+Procedure TDutchGridConverterTests.SRSDefinition_ContainsOblique;
 begin
   Assert.IsTrue(Pos('Oblique_Stereographic', FConv.SRSDefinition) > 0,
     'Dutch Grid SRSDefinition should contain "Oblique_Stereographic"');
 end;
 
-{ TWebMercatorConverterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-procedure TWebMercatorConverterTests.Setup;
+Procedure TWebMercatorConverterTests.Setup;
 begin
   FConv := TWebMercatorCoordinateConverter.Create;
 end;
 
-procedure TWebMercatorConverterTests.TearDown;
+Procedure TWebMercatorConverterTests.TearDown;
 begin
   FConv.Free;
 end;
 
-procedure TWebMercatorConverterTests.MetersPerUnit_IsOne;
+Procedure TWebMercatorConverterTests.MetersPerUnit_IsOne;
 begin
   Assert.AreEqual(1.0, FConv.MetersPerUnit, 1e-12);
 end;
 
-procedure TWebMercatorConverterTests.GeodeticCoordToCoord_OriginIsZero;
+Procedure TWebMercatorConverterTests.GeodeticCoordToCoord_OriginIsZero;
 var
   G: TGeodeticCoordinate;
   C: TCoordinate;
@@ -300,7 +300,7 @@ begin
   Assert.AreEqual(0.0, C.Y, 1e-6);
 end;
 
-procedure TWebMercatorConverterTests.GeodeticCoordToCoord_Longitude180_XIsHalfCircumference;
+Procedure TWebMercatorConverterTests.GeodeticCoordToCoord_Longitude180_XIsHalfCircumference;
 const
   EarthCircumference = 2*Pi*6378137.0;
 var
@@ -312,7 +312,7 @@ begin
   Assert.AreEqual(EarthCircumference/2, C.X, 1e-3);
 end;
 
-procedure TWebMercatorConverterTests.GeodeticCoordToCoord_AtMaxLatitude_YIsHalfCircumference;
+Procedure TWebMercatorConverterTests.GeodeticCoordToCoord_AtMaxLatitude_YIsHalfCircumference;
 const
   EarthCircumference = 2*Pi*6378137.0;
 var
@@ -330,7 +330,7 @@ begin
   Assert.AreEqual(EarthCircumference/2, C.Y, 1e-3);
 end;
 
-procedure TWebMercatorConverterTests.RoundTrip_Coord;
+Procedure TWebMercatorConverterTests.RoundTrip_Coord;
 var
   Original, Recovered: TCoordinate;
 begin
@@ -340,7 +340,7 @@ begin
   Assert.AreEqual(Original.Y, Recovered.Y, 1e-6);
 end;
 
-procedure TWebMercatorConverterTests.LatitudeBeyondMaxLatitude_RaisesException;
+Procedure TWebMercatorConverterTests.LatitudeBeyondMaxLatitude_RaisesException;
 var
   Proj: TWebMercatorProjection;
   G: TGeodeticCoordinate;
@@ -352,27 +352,27 @@ begin
     Proj.Free;
   end;
   Assert.WillRaise(
-    procedure begin FConv.GeodeticCoordToCoord(G) end,
+    Procedure begin FConv.GeodeticCoordToCoord(G) end,
     Exception);
 end;
 
-procedure TWebMercatorConverterTests.SRID_Is3857;
+Procedure TWebMercatorConverterTests.SRID_Is3857;
 begin
   Assert.AreEqual(3857, FConv.SRID);
 end;
 
-procedure TWebMercatorConverterTests.SRSName_IsPseudoMercator;
+Procedure TWebMercatorConverterTests.SRSName_IsPseudoMercator;
 begin
   Assert.IsTrue(Pos('Mercator', FConv.SRSName) > 0, 'SRSName should contain "Mercator"');
 end;
 
-procedure TWebMercatorConverterTests.SRSDefinition_ContainsMercator1SP;
+Procedure TWebMercatorConverterTests.SRSDefinition_ContainsMercator1SP;
 begin
   Assert.IsTrue(Pos('Mercator_1SP', FConv.SRSDefinition) > 0,
     'SRSDefinition should contain "Mercator_1SP"');
 end;
 
-procedure TWebMercatorConverterTests.SRSDefinition_StatesSphericalModel;
+Procedure TWebMercatorConverterTests.SRSDefinition_StatesSphericalModel;
 // Without the PROJ4 extension the WKT reads as an ellipsoidal Mercator, which
 // puts coordinates tens of kilometres out away from the equator.
 begin
@@ -381,24 +381,25 @@ begin
   Assert.IsTrue(Pos('+nadgrids=@null', FConv.SRSDefinition) > 0,
     'SRSDefinition should contain "+nadgrids=@null"');
 end;
-{ TUtmConverterTests }
 
-procedure TUtmConverterTests.Setup;
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TUtmConverterTests.Setup;
 begin
   FConv := TUtmCoordinateConverter.Create(31, hpNorth);
 end;
 
-procedure TUtmConverterTests.TearDown;
+Procedure TUtmConverterTests.TearDown;
 begin
   FConv.Free;
 end;
 
-procedure TUtmConverterTests.MetersPerUnit_IsOne;
+Procedure TUtmConverterTests.MetersPerUnit_IsOne;
 begin
   Assert.AreEqual(1.0, FConv.MetersPerUnit, 1e-12);
 end;
 
-procedure TUtmConverterTests.GeodeticCoordToCoord_AtCentralMeridianEquator_IsFalseOrigin;
+Procedure TUtmConverterTests.GeodeticCoordToCoord_AtCentralMeridianEquator_IsFalseOrigin;
 var
   G: TGeodeticCoordinate;
   C: TCoordinate;
@@ -410,7 +411,7 @@ begin
   Assert.AreEqual(0.0, C.Y, 1e-3);
 end;
 
-procedure TUtmConverterTests.RoundTrip_Coord;
+Procedure TUtmConverterTests.RoundTrip_Coord;
 var
   Original, Recovered: TCoordinate;
 begin
@@ -421,7 +422,7 @@ begin
   Assert.AreEqual(Original.Y, Recovered.Y, 1e-3);
 end;
 
-procedure TUtmConverterTests.GeodeticCoordToCoord_Amsterdam_MatchesProj;
+Procedure TUtmConverterTests.GeodeticCoordToCoord_Amsterdam_MatchesProj;
 // Reference values from PROJ (EPSG:4326 -> EPSG:32631)
 var
   G: TGeodeticCoordinate;
@@ -434,7 +435,7 @@ begin
   Assert.AreEqual(5804224.142, C.Y, 5e-3);
 end;
 
-procedure TUtmConverterTests.RoundTrip_SouthernHemisphere;
+Procedure TUtmConverterTests.RoundTrip_SouthernHemisphere;
 var
   Conv: TUtmCoordinateConverter;
   Original, Recovered: TCoordinate;
@@ -449,26 +450,26 @@ begin
     Conv.Free;
   end;
 end;
-procedure TUtmConverterTests.InvalidZoneTooLow_RaisesException;
+Procedure TUtmConverterTests.InvalidZoneTooLow_RaisesException;
 begin
   Assert.WillRaise(
-    procedure begin TUtmCoordinateConverter.Create(0, hpNorth).Free end,
+    Procedure begin TUtmCoordinateConverter.Create(0, hpNorth).Free end,
     Exception);
 end;
 
-procedure TUtmConverterTests.InvalidZoneTooHigh_RaisesException;
+Procedure TUtmConverterTests.InvalidZoneTooHigh_RaisesException;
 begin
   Assert.WillRaise(
-    procedure begin TUtmCoordinateConverter.Create(61, hpNorth).Free end,
+    Procedure begin TUtmCoordinateConverter.Create(61, hpNorth).Free end,
     Exception);
 end;
 
-procedure TUtmConverterTests.SRID_Zone31North_Is32631;
+Procedure TUtmConverterTests.SRID_Zone31North_Is32631;
 begin
   Assert.AreEqual(32631, FConv.SRID);
 end;
 
-procedure TUtmConverterTests.SRID_Zone31South_Is32731;
+Procedure TUtmConverterTests.SRID_Zone31South_Is32731;
 var C: TUtmCoordinateConverter;
 begin
   C := TUtmCoordinateConverter.Create(31, hpSouth);
@@ -477,7 +478,7 @@ begin
   finally C.Free; end;
 end;
 
-procedure TUtmConverterTests.SRID_Zone1North_Is32601;
+Procedure TUtmConverterTests.SRID_Zone1North_Is32601;
 var C: TUtmCoordinateConverter;
 begin
   C := TUtmCoordinateConverter.Create(1, hpNorth);
@@ -486,7 +487,7 @@ begin
   finally C.Free; end;
 end;
 
-procedure TUtmConverterTests.SRID_Zone60South_Is32760;
+Procedure TUtmConverterTests.SRID_Zone60South_Is32760;
 var C: TUtmCoordinateConverter;
 begin
   C := TUtmCoordinateConverter.Create(60, hpSouth);
@@ -495,21 +496,21 @@ begin
   finally C.Free; end;
 end;
 
-procedure TUtmConverterTests.SRSName_ContainsZoneAndHemisphere;
+Procedure TUtmConverterTests.SRSName_ContainsZoneAndHemisphere;
 begin
   Assert.IsTrue(Pos('31', FConv.SRSName) > 0, 'SRSName should contain zone number');
   Assert.IsTrue(Pos('N', FConv.SRSName) > 0, 'SRSName should contain hemisphere letter');
 end;
 
-procedure TUtmConverterTests.SRSDefinition_ContainsTransverseMercator;
+Procedure TUtmConverterTests.SRSDefinition_ContainsTransverseMercator;
 begin
   Assert.IsTrue(Pos('Transverse_Mercator', FConv.SRSDefinition) > 0,
     'SRSDefinition should contain "Transverse_Mercator"');
 end;
 
-{ TCoordinateConverterBaseTests }
+////////////////////////////////////////////////////////////////////////////////
 
-procedure TCoordinateConverterBaseTests.DefaultSRID_BaseReturnsZero;
+Procedure TCoordinateConverterBaseTests.DefaultSRID_BaseReturnsZero;
 var C: TMinimalConverter;
 begin
   C := TMinimalConverter.Create;
@@ -518,7 +519,7 @@ begin
   finally C.Free; end;
 end;
 
-procedure TCoordinateConverterBaseTests.DefaultSRSName_BaseReturnsUndefined;
+Procedure TCoordinateConverterBaseTests.DefaultSRSName_BaseReturnsUndefined;
 var C: TMinimalConverter;
 begin
   C := TMinimalConverter.Create;
@@ -527,7 +528,7 @@ begin
   finally C.Free; end;
 end;
 
-procedure TCoordinateConverterBaseTests.DefaultSRSDefinition_BaseReturnsUndefined;
+Procedure TCoordinateConverterBaseTests.DefaultSRSDefinition_BaseReturnsUndefined;
 var C: TMinimalConverter;
 begin
   C := TMinimalConverter.Create;

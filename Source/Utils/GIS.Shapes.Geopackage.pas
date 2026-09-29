@@ -753,7 +753,7 @@ begin
   end;
 end;
 
-procedure TGeopackageWriter.InitSchema;
+Procedure TGeopackageWriter.InitSchema;
 begin
   ExecSQL(
     'CREATE TABLE IF NOT EXISTS gpkg_spatial_ref_sys (' +
@@ -821,7 +821,7 @@ begin
 end;
 
 Function TGeopackageWriter.CreateLayerWriter(const LayerName: String;
-  const Converter: TCoordinateConverter): TGeopackageLayerWriter;
+                                             const Converter: TCoordinateConverter): TGeopackageLayerWriter;
 begin
   InsertSRS(Converter.SRID, Converter.SRSName, 'EPSG', Converter.SRSDefinition);
   Result := CreateLayerWriter(LayerName, Converter.SRID, []);

@@ -22,27 +22,27 @@ type
   [TestFixture]
   TGeoJSONWriterTests = class
   private
-    function TempFile: String;
-    procedure DeleteTempFile;
+    Function TempFile: String;
+    Procedure DeleteTempFile;
   public
-    [Test] procedure WritePoint_RoundTrip;
-    [Test] procedure WritePolygon_RoundTrip;
-    [Test] procedure WritePolygon_RingClosedAutomatically;
-    [Test] procedure WriteLineString_RoundTrip;
-    [Test] procedure WriteMultipleShapes_AllRead;
+    [Test] Procedure WritePoint_RoundTrip;
+    [Test] Procedure WritePolygon_RoundTrip;
+    [Test] Procedure WritePolygon_RingClosedAutomatically;
+    [Test] Procedure WriteLineString_RoundTrip;
+    [Test] Procedure WriteMultipleShapes_AllRead;
   end;
 
   [TestFixture]
   TESRIWriterTests = class
   private
-    function TempBase: String;
-    procedure DeleteTempFiles;
-    function BigEndianHeaderField(const FileName: String): Integer;
+    Function TempBase: String;
+    Procedure DeleteTempFiles;
+    Function BigEndianHeaderField(const FileName: String): Integer;
   public
-    [Test] procedure WritePolygon_RoundTrip;
-    [Test] procedure WriteMultiplePolygons_CountMatches;
-    [Test] procedure WriteLineString_RoundTrip;
-    [Test] procedure FileHeader_SizeFields_MatchFileSizes;
+    [Test] Procedure WritePolygon_RoundTrip;
+    [Test] Procedure WriteMultiplePolygons_CountMatches;
+    [Test] Procedure WriteLineString_RoundTrip;
+    [Test] Procedure FileHeader_SizeFields_MatchFileSizes;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,19 +52,19 @@ implementation
 uses
   System.SysUtils, System.IOUtils;
 
-{ TGeoJSONWriterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-function TGeoJSONWriterTests.TempFile: String;
+Function TGeoJSONWriterTests.TempFile: String;
 begin
   Result := TPath.GetTempPath + 'TestWriter_tmp.geojson';
 end;
 
-procedure TGeoJSONWriterTests.DeleteTempFile;
+Procedure TGeoJSONWriterTests.DeleteTempFile;
 begin
   if FileExists(TempFile) then DeleteFile(TempFile);
 end;
 
-procedure TGeoJSONWriterTests.WritePoint_RoundTrip;
+Procedure TGeoJSONWriterTests.WritePoint_RoundTrip;
 var
   Written, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -92,7 +92,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeoJSONWriterTests.WritePolygon_RoundTrip;
+Procedure TGeoJSONWriterTests.WritePolygon_RoundTrip;
 var
   Written, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -125,7 +125,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeoJSONWriterTests.WritePolygon_RingClosedAutomatically;
+Procedure TGeoJSONWriterTests.WritePolygon_RingClosedAutomatically;
 var
   Written, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -160,7 +160,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeoJSONWriterTests.WriteLineString_RoundTrip;
+Procedure TGeoJSONWriterTests.WriteLineString_RoundTrip;
 var
   Written, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -192,7 +192,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeoJSONWriterTests.WriteMultipleShapes_AllRead;
+Procedure TGeoJSONWriterTests.WriteMultipleShapes_AllRead;
 var
   Shape, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -221,20 +221,20 @@ begin
   DeleteTempFile;
 end;
 
-{ TESRIWriterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-function TESRIWriterTests.TempBase: String;
+Function TESRIWriterTests.TempBase: String;
 begin
   Result := TPath.GetTempPath + 'TestESRIWriter_tmp';
 end;
 
-procedure TESRIWriterTests.DeleteTempFiles;
+Procedure TESRIWriterTests.DeleteTempFiles;
 begin
   for var Ext in ['.shp', '.shx', '.dbf'] do
     if FileExists(TempBase + Ext) then DeleteFile(TempBase + Ext);
 end;
 
-function TESRIWriterTests.BigEndianHeaderField(const FileName: String): Integer;
+Function TESRIWriterTests.BigEndianHeaderField(const FileName: String): Integer;
 // Returns the big-endian file size field (in 16-bit words) at offset 24 of
 // a shape or index file header
 begin
@@ -243,7 +243,7 @@ begin
             (Integer(Bytes[26]) shl 8) + Integer(Bytes[27]);
 end;
 
-procedure TESRIWriterTests.WritePolygon_RoundTrip;
+Procedure TESRIWriterTests.WritePolygon_RoundTrip;
 var
   Read: TGISShape;
   Props: TGISShapeProperties;
@@ -276,7 +276,7 @@ begin
   DeleteTempFiles;
 end;
 
-procedure TESRIWriterTests.WriteMultiplePolygons_CountMatches;
+Procedure TESRIWriterTests.WriteMultiplePolygons_CountMatches;
 const
   N = 4;
 var
@@ -314,7 +314,7 @@ begin
   DeleteTempFiles;
 end;
 
-procedure TESRIWriterTests.WriteLineString_RoundTrip;
+Procedure TESRIWriterTests.WriteLineString_RoundTrip;
 var
   Read: TGISShape;
   Props: TGISShapeProperties;
@@ -344,7 +344,7 @@ begin
   DeleteTempFiles;
 end;
 
-procedure TESRIWriterTests.FileHeader_SizeFields_MatchFileSizes;
+Procedure TESRIWriterTests.FileHeader_SizeFields_MatchFileSizes;
 // Two three-point polylines give a 308 byte shape file, so the big-endian
 // size field holds 154: a value with its low byte above 127, which the
 // byte swapping must handle without signed overflow

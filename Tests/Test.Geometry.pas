@@ -20,38 +20,38 @@ type
   [TestFixture]
   TCoordinateRectTests = class
   private
-    function MakeRect: TCoordinateRect;
+    Function MakeRect: TCoordinateRect;
   public
     // Width / Height
-    [Test] procedure Width_ReturnsRightMinusLeft;
-    [Test] procedure Height_ReturnsTopMinusBottom;
+    [Test] Procedure Width_ReturnsRightMinusLeft;
+    [Test] Procedure Height_ReturnsTopMinusBottom;
 
     // CenterPoint
-    [Test] procedure CenterPoint_ReturnsCorrectValue;
+    [Test] Procedure CenterPoint_ReturnsCorrectValue;
 
     // Empty / Clear
-    [Test] procedure Empty_WhenLeftGreaterThanRight;
-    [Test] procedure Empty_WhenBottomGreaterThanTop;
-    [Test] procedure NotEmpty_WhenValid;
-    [Test] procedure Clear_MakesRectEmpty;
+    [Test] Procedure Empty_WhenLeftGreaterThanRight;
+    [Test] Procedure Empty_WhenBottomGreaterThanTop;
+    [Test] Procedure NotEmpty_WhenValid;
+    [Test] Procedure Clear_MakesRectEmpty;
 
     // Enclose
-    [Test] procedure Enclose_PointInsideDoesNotExpand;
-    [Test] procedure Enclose_PointOutsideExpandsLeft;
-    [Test] procedure Enclose_PointOutsideExpandsRight;
-    [Test] procedure Enclose_PointOutsideExpandsTop;
-    [Test] procedure Enclose_PointOutsideExpandsBottom;
-    [Test] procedure Enclose_FirstPointOnEmptyRect;
+    [Test] Procedure Enclose_PointInsideDoesNotExpand;
+    [Test] Procedure Enclose_PointOutsideExpandsLeft;
+    [Test] Procedure Enclose_PointOutsideExpandsRight;
+    [Test] Procedure Enclose_PointOutsideExpandsTop;
+    [Test] Procedure Enclose_PointOutsideExpandsBottom;
+    [Test] Procedure Enclose_FirstPointOnEmptyRect;
 
     // Contains
-    [Test] procedure Contains_PointInsideReturnsTrue;
-    [Test] procedure Contains_PointOutsideReturnsFalse;
-    [Test] procedure Contains_PointOnBoundaryReturnsTrue;
+    [Test] Procedure Contains_PointInsideReturnsTrue;
+    [Test] Procedure Contains_PointOutsideReturnsFalse;
+    [Test] Procedure Contains_PointOnBoundaryReturnsTrue;
 
     // IntersectsWith
-    [Test] procedure IntersectsWith_OverlappingRectsReturnsTrue;
-    [Test] procedure IntersectsWith_NonOverlappingReturnsFalse;
-    [Test] procedure IntersectsWith_TouchingReturnsFalse;
+    [Test] Procedure IntersectsWith_OverlappingRectsReturnsTrue;
+    [Test] Procedure IntersectsWith_NonOverlappingReturnsFalse;
+    [Test] Procedure IntersectsWith_TouchingReturnsFalse;
   end;
 
   [TestFixture]
@@ -78,7 +78,7 @@ type
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-function TCoordinateRectTests.MakeRect: TCoordinateRect;
+Function TCoordinateRectTests.MakeRect: TCoordinateRect;
 begin
   Result.Left   := 1.0;
   Result.Right  := 5.0;
@@ -86,17 +86,17 @@ begin
   Result.Top    := 6.0;
 end;
 
-procedure TCoordinateRectTests.Width_ReturnsRightMinusLeft;
+Procedure TCoordinateRectTests.Width_ReturnsRightMinusLeft;
 begin
   Assert.AreEqual(4.0, MakeRect.Width, 1e-12);
 end;
 
-procedure TCoordinateRectTests.Height_ReturnsTopMinusBottom;
+Procedure TCoordinateRectTests.Height_ReturnsTopMinusBottom;
 begin
   Assert.AreEqual(4.0, MakeRect.Height, 1e-12);
 end;
 
-procedure TCoordinateRectTests.CenterPoint_ReturnsCorrectValue;
+Procedure TCoordinateRectTests.CenterPoint_ReturnsCorrectValue;
 var
   C: TCoordinate;
 begin
@@ -105,7 +105,7 @@ begin
   Assert.AreEqual(4.0, C.Y, 1e-12);
 end;
 
-procedure TCoordinateRectTests.Empty_WhenLeftGreaterThanRight;
+Procedure TCoordinateRectTests.Empty_WhenLeftGreaterThanRight;
 var
   R: TCoordinateRect;
 begin
@@ -113,7 +113,7 @@ begin
   Assert.IsTrue(R.Empty);
 end;
 
-procedure TCoordinateRectTests.Empty_WhenBottomGreaterThanTop;
+Procedure TCoordinateRectTests.Empty_WhenBottomGreaterThanTop;
 var
   R: TCoordinateRect;
 begin
@@ -121,12 +121,12 @@ begin
   Assert.IsTrue(R.Empty);
 end;
 
-procedure TCoordinateRectTests.NotEmpty_WhenValid;
+Procedure TCoordinateRectTests.NotEmpty_WhenValid;
 begin
   Assert.IsFalse(MakeRect.Empty);
 end;
 
-procedure TCoordinateRectTests.Clear_MakesRectEmpty;
+Procedure TCoordinateRectTests.Clear_MakesRectEmpty;
 var
   R: TCoordinateRect;
 begin
@@ -135,7 +135,7 @@ begin
   Assert.IsTrue(R.Empty);
 end;
 
-procedure TCoordinateRectTests.Enclose_PointInsideDoesNotExpand;
+Procedure TCoordinateRectTests.Enclose_PointInsideDoesNotExpand;
 var
   R: TCoordinateRect;
 begin
@@ -147,7 +147,7 @@ begin
   Assert.AreEqual(6.0, R.Top,    1e-12);
 end;
 
-procedure TCoordinateRectTests.Enclose_PointOutsideExpandsLeft;
+Procedure TCoordinateRectTests.Enclose_PointOutsideExpandsLeft;
 var
   R: TCoordinateRect;
 begin
@@ -156,7 +156,7 @@ begin
   Assert.AreEqual(-2.0, R.Left, 1e-12);
 end;
 
-procedure TCoordinateRectTests.Enclose_PointOutsideExpandsRight;
+Procedure TCoordinateRectTests.Enclose_PointOutsideExpandsRight;
 var
   R: TCoordinateRect;
 begin
@@ -165,7 +165,7 @@ begin
   Assert.AreEqual(9.0, R.Right, 1e-12);
 end;
 
-procedure TCoordinateRectTests.Enclose_PointOutsideExpandsTop;
+Procedure TCoordinateRectTests.Enclose_PointOutsideExpandsTop;
 var
   R: TCoordinateRect;
 begin
@@ -174,7 +174,7 @@ begin
   Assert.AreEqual(10.0, R.Top, 1e-12);
 end;
 
-procedure TCoordinateRectTests.Enclose_PointOutsideExpandsBottom;
+Procedure TCoordinateRectTests.Enclose_PointOutsideExpandsBottom;
 var
   R: TCoordinateRect;
 begin
@@ -183,7 +183,7 @@ begin
   Assert.AreEqual(-1.0, R.Bottom, 1e-12);
 end;
 
-procedure TCoordinateRectTests.Enclose_FirstPointOnEmptyRect;
+Procedure TCoordinateRectTests.Enclose_FirstPointOnEmptyRect;
 var
   R: TCoordinateRect;
 begin
@@ -196,22 +196,22 @@ begin
   Assert.AreEqual(7.0, R.Top,    1e-12);
 end;
 
-procedure TCoordinateRectTests.Contains_PointInsideReturnsTrue;
+Procedure TCoordinateRectTests.Contains_PointInsideReturnsTrue;
 begin
   Assert.IsTrue(MakeRect.Contains(TCoordinate.Create(3.0, 4.0)));
 end;
 
-procedure TCoordinateRectTests.Contains_PointOutsideReturnsFalse;
+Procedure TCoordinateRectTests.Contains_PointOutsideReturnsFalse;
 begin
   Assert.IsFalse(MakeRect.Contains(TCoordinate.Create(0.0, 4.0)));
 end;
 
-procedure TCoordinateRectTests.Contains_PointOnBoundaryReturnsTrue;
+Procedure TCoordinateRectTests.Contains_PointOnBoundaryReturnsTrue;
 begin
   Assert.IsTrue(MakeRect.Contains(TCoordinate.Create(1.0, 2.0)));
 end;
 
-procedure TCoordinateRectTests.IntersectsWith_OverlappingRectsReturnsTrue;
+Procedure TCoordinateRectTests.IntersectsWith_OverlappingRectsReturnsTrue;
 var
   A, B: TCoordinateRect;
 begin
@@ -220,7 +220,7 @@ begin
   Assert.IsTrue(A.IntersectsWith(B));
 end;
 
-procedure TCoordinateRectTests.IntersectsWith_NonOverlappingReturnsFalse;
+Procedure TCoordinateRectTests.IntersectsWith_NonOverlappingReturnsFalse;
 var
   A, B: TCoordinateRect;
 begin
@@ -229,7 +229,7 @@ begin
   Assert.IsFalse(A.IntersectsWith(B));
 end;
 
-procedure TCoordinateRectTests.IntersectsWith_TouchingReturnsFalse;
+Procedure TCoordinateRectTests.IntersectsWith_TouchingReturnsFalse;
 var
   A, B: TCoordinateRect;
 begin

@@ -23,22 +23,22 @@ type
   [TestFixture]
   TESRIShapeFileReaderTests = class
   private
-    function DataPath: String;
-    function CountAndBounds(const FileName: String;
-      out ShapeCount: Integer; out BB: TCoordinateRect): TShapeType;
+    Function DataPath: String;
+    Function CountAndBounds(const FileName: String;
+                            out ShapeCount: Integer; out BB: TCoordinateRect): TShapeType;
   public
     // Dutch Grid shapefile
-    [Test] procedure DutchGrid_ReadsExpectedShapeCount;
-    [Test] procedure DutchGrid_AllShapesArePolygons;
-    [Test] procedure DutchGrid_BoundingBoxWithinNetherlandsDutchGrid;
+    [Test] Procedure DutchGrid_ReadsExpectedShapeCount;
+    [Test] Procedure DutchGrid_AllShapesArePolygons;
+    [Test] Procedure DutchGrid_BoundingBoxWithinNetherlandsDutchGrid;
 
     // WGS84 shapefile
-    [Test] procedure WGS84_ReadsExpectedShapeCount;
-    [Test] procedure WGS84_AllShapesArePolygons;
-    [Test] procedure WGS84_BoundingBoxWithinNetherlandsWGS84;
+    [Test] Procedure WGS84_ReadsExpectedShapeCount;
+    [Test] Procedure WGS84_AllShapesArePolygons;
+    [Test] Procedure WGS84_BoundingBoxWithinNetherlandsWGS84;
 
     // Both files should read the same number of shapes (same provinces, different CRS)
-    [Test] procedure BothFiles_SameShapeCount;
+    [Test] Procedure BothFiles_SameShapeCount;
   end;
 
   // The properties' encoding: Provincies_dutch_grid.dbf holds UTF-8 without
@@ -67,13 +67,13 @@ implementation
 
 uses System.SysUtils, System.IOUtils;
 
-function TESRIShapeFileReaderTests.DataPath: String;
+Function TESRIShapeFileReaderTests.DataPath: String;
 begin
   Result := ExpandFileName(ExtractFilePath(ParamStr(0)) + '..\Data\');
 end;
 
-function TESRIShapeFileReaderTests.CountAndBounds(const FileName: String;
-  out ShapeCount: Integer; out BB: TCoordinateRect): TShapeType;
+Function TESRIShapeFileReaderTests.CountAndBounds(const FileName: String;
+                                                  out ShapeCount: Integer; out BB: TCoordinateRect): TShapeType;
 var
   Reader: TESRIShapeFileReader;
   Shape: TGISShape;
@@ -96,7 +96,7 @@ begin
   end;
 end;
 
-procedure TESRIShapeFileReaderTests.DutchGrid_ReadsExpectedShapeCount;
+Procedure TESRIShapeFileReaderTests.DutchGrid_ReadsExpectedShapeCount;
 var
   Count: Integer;
   BB: TCoordinateRect;
@@ -105,7 +105,7 @@ begin
   Assert.IsTrue(Count > 0, 'Should read at least one shape');
 end;
 
-procedure TESRIShapeFileReaderTests.DutchGrid_AllShapesArePolygons;
+Procedure TESRIShapeFileReaderTests.DutchGrid_AllShapesArePolygons;
 var
   Reader: TESRIShapeFileReader;
   Shape: TGISShape;
@@ -120,7 +120,7 @@ begin
   end;
 end;
 
-procedure TESRIShapeFileReaderTests.DutchGrid_BoundingBoxWithinNetherlandsDutchGrid;
+Procedure TESRIShapeFileReaderTests.DutchGrid_BoundingBoxWithinNetherlandsDutchGrid;
 var
   Count: Integer;
   BB: TCoordinateRect;
@@ -133,7 +133,7 @@ begin
   Assert.IsTrue(BB.Top    < 629000, 'Top bound');
 end;
 
-procedure TESRIShapeFileReaderTests.WGS84_ReadsExpectedShapeCount;
+Procedure TESRIShapeFileReaderTests.WGS84_ReadsExpectedShapeCount;
 var
   Count: Integer;
   BB: TCoordinateRect;
@@ -142,7 +142,7 @@ begin
   Assert.IsTrue(Count > 0, 'Should read at least one shape');
 end;
 
-procedure TESRIShapeFileReaderTests.WGS84_AllShapesArePolygons;
+Procedure TESRIShapeFileReaderTests.WGS84_AllShapesArePolygons;
 var
   Reader: TESRIShapeFileReader;
   Shape: TGISShape;
@@ -157,7 +157,7 @@ begin
   end;
 end;
 
-procedure TESRIShapeFileReaderTests.WGS84_BoundingBoxWithinNetherlandsWGS84;
+Procedure TESRIShapeFileReaderTests.WGS84_BoundingBoxWithinNetherlandsWGS84;
 var
   Count: Integer;
   BB: TCoordinateRect;
@@ -170,7 +170,7 @@ begin
   Assert.IsTrue(BB.Top    < 54.0, 'Top (latitude)');
 end;
 
-procedure TESRIShapeFileReaderTests.BothFiles_SameShapeCount;
+Procedure TESRIShapeFileReaderTests.BothFiles_SameShapeCount;
 var
   CountDG, CountWGS: Integer;
   BB: TCoordinateRect;

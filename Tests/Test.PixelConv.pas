@@ -23,12 +23,12 @@ type
   private
     FConv: TCartesianPixelConverter;
   public
-    [Setup]    procedure Setup;
-    [TearDown] procedure TearDown;
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
 
-    [Test] procedure NotInitializedByDefault;
-    [Test] procedure CoordToPixel_PixelToCoord_RoundTrip;
-    [Test] procedure Initialize_CenterMapsToHalfPixelDimensions;
+    [Test] Procedure NotInitializedByDefault;
+    [Test] Procedure CoordToPixel_PixelToCoord_RoundTrip;
+    [Test] Procedure Initialize_CenterMapsToHalfPixelDimensions;
   end;
 
   [TestFixture]
@@ -36,24 +36,24 @@ type
   private
     FConvWGS84:  TWebMercatorPixelConverter;
     FConvDutchGrid: TWebMercatorPixelConverter;
-    function NetherlandsBBox: TCoordinateRect;
+    Function NetherlandsBBox: TCoordinateRect;
   public
-    [Setup]    procedure Setup;
-    [TearDown] procedure TearDown;
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
 
-    [Test] procedure NotInitializedByDefault;
-    [Test] procedure Initialize_SetsInitializedFlag;
+    [Test] Procedure NotInitializedByDefault;
+    [Test] Procedure Initialize_SetsInitializedFlag;
     // SyncFrom: two converters with different CRS show the same tile layout
-    [Test] procedure SyncFrom_SameZoomLevelAndMapOrigin;
+    [Test] Procedure SyncFrom_SameZoomLevelAndMapOrigin;
     // Resize: geographic centre stays fixed
-    [Test] procedure Resize_PreservesGeographicCentre;
+    [Test] Procedure Resize_PreservesGeographicCentre;
     // PanMap: centre shifts by the expected amount
-    [Test] procedure PanMap_MovesGeographicCentre;
+    [Test] Procedure PanMap_MovesGeographicCentre;
     // History: previous and next views
-    [Test] procedure Previous_Next_RestoreViews;
-    [Test] procedure Resize_IsNotAddedToHistory;
-    [Test] procedure Previous_AfterResize_RestoresGeographicCentre;
-    [Test] procedure Change_AfterPrevious_ClearsNext;
+    [Test] Procedure Previous_Next_RestoreViews;
+    [Test] Procedure Resize_IsNotAddedToHistory;
+    [Test] Procedure Previous_AfterResize_RestoresGeographicCentre;
+    [Test] Procedure Change_AfterPrevious_ClearsNext;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,24 +62,24 @@ implementation
 
 uses System.SysUtils, System.Math;
 
-{ TCartesianPixelConverterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-procedure TCartesianPixelConverterTests.Setup;
+Procedure TCartesianPixelConverterTests.Setup;
 begin
   FConv := TCartesianPixelConverter.Create;
 end;
 
-procedure TCartesianPixelConverterTests.TearDown;
+Procedure TCartesianPixelConverterTests.TearDown;
 begin
   FConv.Free;
 end;
 
-procedure TCartesianPixelConverterTests.NotInitializedByDefault;
+Procedure TCartesianPixelConverterTests.NotInitializedByDefault;
 begin
   Assert.IsFalse(FConv.Initialized);
 end;
 
-procedure TCartesianPixelConverterTests.CoordToPixel_PixelToCoord_RoundTrip;
+Procedure TCartesianPixelConverterTests.CoordToPixel_PixelToCoord_RoundTrip;
 var
   BB: TCoordinateRect;
   Original, Recovered: TCoordinate;
@@ -94,7 +94,7 @@ begin
   Assert.AreEqual(Original.Y, Recovered.Y, 1e-8);
 end;
 
-procedure TCartesianPixelConverterTests.Initialize_CenterMapsToHalfPixelDimensions;
+Procedure TCartesianPixelConverterTests.Initialize_CenterMapsToHalfPixelDimensions;
 var
   BB: TCoordinateRect;
   CentrePx: TPointF;
@@ -106,37 +106,37 @@ begin
   Assert.AreEqual(300.0, CentrePx.Y, 1.0, 'Centre Y should be half pixel height');
 end;
 
-{ TWebMercatorPixelConverterTests }
+////////////////////////////////////////////////////////////////////////////////
 
-function TWebMercatorPixelConverterTests.NetherlandsBBox: TCoordinateRect;
+Function TWebMercatorPixelConverterTests.NetherlandsBBox: TCoordinateRect;
 begin
   Result.Left := 3.2; Result.Right := 7.3; Result.Bottom := 50.7; Result.Top := 53.7;
 end;
 
-procedure TWebMercatorPixelConverterTests.Setup;
+Procedure TWebMercatorPixelConverterTests.Setup;
 begin
   FConvWGS84    := TWebMercatorPixelConverter.Create(TWgs84CoordinateConverter.Create);
   FConvDutchGrid := TWebMercatorPixelConverter.Create(TDutchGridCoordinateConverter.Create);
 end;
 
-procedure TWebMercatorPixelConverterTests.TearDown;
+Procedure TWebMercatorPixelConverterTests.TearDown;
 begin
   FConvWGS84.Free;
   FConvDutchGrid.Free;
 end;
 
-procedure TWebMercatorPixelConverterTests.NotInitializedByDefault;
+Procedure TWebMercatorPixelConverterTests.NotInitializedByDefault;
 begin
   Assert.IsFalse(FConvWGS84.Initialized);
 end;
 
-procedure TWebMercatorPixelConverterTests.Initialize_SetsInitializedFlag;
+Procedure TWebMercatorPixelConverterTests.Initialize_SetsInitializedFlag;
 begin
   FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
   Assert.IsTrue(FConvWGS84.Initialized);
 end;
 
-procedure TWebMercatorPixelConverterTests.SyncFrom_SameZoomLevelAndMapOrigin;
+Procedure TWebMercatorPixelConverterTests.SyncFrom_SameZoomLevelAndMapOrigin;
 var
   // Initialize WGS84 converter with Netherlands bbox
   // Sync a Dutch Grid converter from it
@@ -155,7 +155,7 @@ begin
   Assert.AreEqual(GeoWGS84.Latitude,  GeoDutchGrid.Latitude,  1e-6, 'Latitude after SyncFrom');
 end;
 
-procedure TWebMercatorPixelConverterTests.Resize_PreservesGeographicCentre;
+Procedure TWebMercatorPixelConverterTests.Resize_PreservesGeographicCentre;
 var
   CentreBefore, CentreAfter: TGeodeticCoordinate;
   OldW, OldH, NewW, NewH: Integer;
@@ -172,7 +172,7 @@ begin
   Assert.AreEqual(CentreBefore.Latitude,  CentreAfter.Latitude,  1e-6, 'Latitude after resize');
 end;
 
-procedure TWebMercatorPixelConverterTests.PanMap_MovesGeographicCentre;
+Procedure TWebMercatorPixelConverterTests.PanMap_MovesGeographicCentre;
 var
   PointBefore, PointAfter: TGeodeticCoordinate;
 begin
@@ -186,7 +186,7 @@ begin
   Assert.AreEqual(PointBefore.Latitude,  PointAfter.Latitude,  1e-6, 'PanMap latitude');
 end;
 
-procedure TWebMercatorPixelConverterTests.Previous_Next_RestoreViews;
+Procedure TWebMercatorPixelConverterTests.Previous_Next_RestoreViews;
 var
   Initial, Panned: TGeodeticCoordinate;
 begin
@@ -210,7 +210,7 @@ begin
   Assert.IsFalse(FConvWGS84.NextAvail, 'Back at the last view');
 end;
 
-procedure TWebMercatorPixelConverterTests.Resize_IsNotAddedToHistory;
+Procedure TWebMercatorPixelConverterTests.Resize_IsNotAddedToHistory;
 begin
   FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
   FConvWGS84.PanMap(100, 0);
@@ -221,7 +221,7 @@ begin
   Assert.IsTrue(FConvWGS84.NextAvail, 'Resize kept the next view');
 end;
 
-procedure TWebMercatorPixelConverterTests.Previous_AfterResize_RestoresGeographicCentre;
+Procedure TWebMercatorPixelConverterTests.Previous_AfterResize_RestoresGeographicCentre;
 var
   Initial: TGeodeticCoordinate;
 begin
@@ -236,7 +236,7 @@ begin
   Assert.AreEqual(Initial.Latitude,  Centre.Latitude,  1e-6, 'Latitude after Previous');
 end;
 
-procedure TWebMercatorPixelConverterTests.Change_AfterPrevious_ClearsNext;
+Procedure TWebMercatorPixelConverterTests.Change_AfterPrevious_ClearsNext;
 begin
   FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
   FConvWGS84.PanMap(100, 0);

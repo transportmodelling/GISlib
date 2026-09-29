@@ -179,8 +179,8 @@ end;
 ////////////////////////////////////////////////////////////////////////////////
 
 constructor TLayer.Create(const AShapes: TLabeledShapesLayer; const AName: String;
-                           const ACoordSystem: TGISCoordinateSystem; const AOpacity: Byte;
-                           const APrimary: TWebMercatorPixelConverter);
+                          const ACoordSystem: TGISCoordinateSystem; const AOpacity: Byte;
+                          const APrimary: TWebMercatorPixelConverter);
 begin
   Shapes      := AShapes;
   Name        := AName;

@@ -28,30 +28,30 @@ type
   [TestFixture]
   TGeopackageTests = class
   private
-    function DataPath: String;
-    function GpkgFile: String;
-    procedure CheckFileExists;
-    function  TempFile: String;
-    procedure DeleteTempFile;
+    Function DataPath: String;
+    Function GpkgFile: String;
+    Procedure CheckFileExists;
+    Function  TempFile: String;
+    Procedure DeleteTempFile;
   public
     // Reader tests
-    [Test] procedure LayerNames_ContainsExpectedLayer;
-    [Test] procedure LayerNames_ReturnsNonEmptyList;
-    [Test] procedure Reader_ReadsNonZeroShapeCount;
-    [Test] procedure Reader_AllShapesArePolygons;
-    [Test] procedure Reader_BoundingBoxWithinNetherlandsDutchGrid;
-    [Test] procedure Reader_ShapeCountMatchesShapefile;
-    [Test] procedure Reader_SRID_MatchesStoredValue;
+    [Test] Procedure LayerNames_ContainsExpectedLayer;
+    [Test] Procedure LayerNames_ReturnsNonEmptyList;
+    [Test] Procedure Reader_ReadsNonZeroShapeCount;
+    [Test] Procedure Reader_AllShapesArePolygons;
+    [Test] Procedure Reader_BoundingBoxWithinNetherlandsDutchGrid;
+    [Test] Procedure Reader_ShapeCountMatchesShapefile;
+    [Test] Procedure Reader_SRID_MatchesStoredValue;
 
     // Writer tests (no external data file needed)
-    [Test] procedure Writer_CreatesFile;
-    [Test] procedure Writer_LayerAppearsInLayerNames;
-    [Test] procedure Writer_RoundTrip_Point;
-    [Test] procedure Writer_RoundTrip_Polygon;
-    [Test] procedure Writer_RoundTrip_ShapeCount;
-    [Test] procedure Writer_RoundTrip_ProvincesShapefile;
-    [Test] procedure Writer_ConverterOverload_StoresCorrectSRS;
-    [Test] procedure Writer_RoundTrip_SRID;
+    [Test] Procedure Writer_CreatesFile;
+    [Test] Procedure Writer_LayerAppearsInLayerNames;
+    [Test] Procedure Writer_RoundTrip_Point;
+    [Test] Procedure Writer_RoundTrip_Polygon;
+    [Test] Procedure Writer_RoundTrip_ShapeCount;
+    [Test] Procedure Writer_RoundTrip_ProvincesShapefile;
+    [Test] Procedure Writer_ConverterOverload_StoresCorrectSRS;
+    [Test] Procedure Writer_RoundTrip_SRID;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -61,24 +61,24 @@ implementation
 uses
   System.SysUtils, System.IOUtils, FireDAC.Comp.Client;
 
-function TGeopackageTests.DataPath: String;
+Function TGeopackageTests.DataPath: String;
 begin
   Result := ExpandFileName(ExtractFilePath(ParamStr(0)) + '..\Data\');
 end;
 
-function TGeopackageTests.GpkgFile: String;
+Function TGeopackageTests.GpkgFile: String;
 begin
   Result := DataPath + 'Provincies.gpkg';
 end;
 
-procedure TGeopackageTests.CheckFileExists;
+Procedure TGeopackageTests.CheckFileExists;
 begin
   Assert.IsTrue(FileExists(GpkgFile),
     'Test requires Data\Provincies.gpkg - create it with: ' +
     'ogr2ogr -f GPKG Data/Provincies.gpkg Data/Provincies_dutch_grid.shp');
 end;
 
-procedure TGeopackageTests.LayerNames_ReturnsNonEmptyList;
+Procedure TGeopackageTests.LayerNames_ReturnsNonEmptyList;
 var
   Pkg: TGeopackage;
 begin
@@ -91,7 +91,7 @@ begin
   end;
 end;
 
-procedure TGeopackageTests.LayerNames_ContainsExpectedLayer;
+Procedure TGeopackageTests.LayerNames_ContainsExpectedLayer;
 var
   Pkg: TGeopackage;
   Names: TArray<String>;
@@ -114,7 +114,7 @@ begin
   end;
 end;
 
-procedure TGeopackageTests.Reader_ReadsNonZeroShapeCount;
+Procedure TGeopackageTests.Reader_ReadsNonZeroShapeCount;
 var
   Pkg: TGeopackage;
   Reader: TGeopackageReader;
@@ -139,7 +139,7 @@ begin
   end;
 end;
 
-procedure TGeopackageTests.Reader_AllShapesArePolygons;
+Procedure TGeopackageTests.Reader_AllShapesArePolygons;
 var
   Pkg: TGeopackage;
   Reader: TGeopackageReader;
@@ -161,7 +161,7 @@ begin
   end;
 end;
 
-procedure TGeopackageTests.Reader_BoundingBoxWithinNetherlandsDutchGrid;
+Procedure TGeopackageTests.Reader_BoundingBoxWithinNetherlandsDutchGrid;
 var
   Pkg: TGeopackage;
   Reader: TGeopackageReader;
@@ -191,7 +191,7 @@ begin
   Assert.IsTrue(BB.Top    < 629000, 'Top bound');
 end;
 
-procedure TGeopackageTests.Reader_ShapeCountMatchesShapefile;
+Procedure TGeopackageTests.Reader_ShapeCountMatchesShapefile;
 var
   Pkg: TGeopackage;
   Reader: TGeopackageReader;
@@ -230,7 +230,7 @@ begin
     'GeoPackage and shapefile should contain the same number of shapes');
 end;
 
-procedure TGeopackageTests.Reader_SRID_MatchesStoredValue;
+Procedure TGeopackageTests.Reader_SRID_MatchesStoredValue;
 // Data\Provincies.gpkg was built with ogr2ogr from a shapefile with no .prj
 // sidecar, so GDAL stamped its "Undefined SRS" placeholder (srs_id 99999) on
 // the layer rather than a real EPSG code.
@@ -256,12 +256,12 @@ end;
 // Writer helpers
 ////////////////////////////////////////////////////////////////////////////////
 
-function TGeopackageTests.TempFile: String;
+Function TGeopackageTests.TempFile: String;
 begin
   Result := TPath.GetTempPath + 'TestGeopackage_tmp.gpkg';
 end;
 
-procedure TGeopackageTests.DeleteTempFile;
+Procedure TGeopackageTests.DeleteTempFile;
 begin
   if FileExists(TempFile) then
     DeleteFile(TempFile);
@@ -271,7 +271,7 @@ end;
 // Writer tests
 ////////////////////////////////////////////////////////////////////////////////
 
-procedure TGeopackageTests.Writer_CreatesFile;
+Procedure TGeopackageTests.Writer_CreatesFile;
 begin
   DeleteTempFile;
   var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
@@ -285,7 +285,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_LayerAppearsInLayerNames;
+Procedure TGeopackageTests.Writer_LayerAppearsInLayerNames;
 begin
   DeleteTempFile;
   var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
@@ -311,7 +311,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_RoundTrip_Point;
+Procedure TGeopackageTests.Writer_RoundTrip_Point;
 var
   Written, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -350,7 +350,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_RoundTrip_Polygon;
+Procedure TGeopackageTests.Writer_RoundTrip_Polygon;
 var
   Written, Read: TGISShape;
   Props: TGISShapeProperties;
@@ -392,7 +392,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_RoundTrip_ShapeCount;
+Procedure TGeopackageTests.Writer_RoundTrip_ShapeCount;
 const
   N = 5;
 var
@@ -438,7 +438,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_RoundTrip_ProvincesShapefile;
+Procedure TGeopackageTests.Writer_RoundTrip_ProvincesShapefile;
 var
   Shape: TGISShape;
   Props: TGISShapeProperties;
@@ -493,7 +493,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_ConverterOverload_StoresCorrectSRS;
+Procedure TGeopackageTests.Writer_ConverterOverload_StoresCorrectSRS;
 var
   Conv: TWgs84CoordinateConverter;
   Pkg:  TGeopackage;
@@ -546,7 +546,7 @@ begin
   DeleteTempFile;
 end;
 
-procedure TGeopackageTests.Writer_RoundTrip_SRID;
+Procedure TGeopackageTests.Writer_RoundTrip_SRID;
 var
   ReadSRID: Integer;
 begin

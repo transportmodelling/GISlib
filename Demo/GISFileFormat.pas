@@ -23,74 +23,71 @@ type
   protected
     // Presents a CRS selection dialog using the supplied systems.
     // Returns nil if the user cancels.
-    function SelectCoordSystem(
-      const ACoordSystems: TArray<TGISCoordinateSystem>): TGISCoordinateSystem;
+    Function SelectCoordSystem(const ACoordSystems: TArray<TGISCoordinateSystem>): TGISCoordinateSystem;
   public
-    function Name: String; virtual; abstract;
-    function Extensions: TArray<String>; virtual; abstract;
+    Function Name: String; virtual; abstract;
+    Function Extensions: TArray<String>; virtual; abstract;
     // One filter entry suitable for TOpenDialog.Filter, e.g. 'ESRI Shapefile|*.shp'
-    function DialogFilter: String; virtual;
+    Function DialogFilter: String; virtual;
     // Returns true if this format handles the given file extension.
-    function Handles(const AExtension: String): Boolean; virtual;
+    Function Handles(const AExtension: String): Boolean; virtual;
     // Opens the file, showing any necessary dialogs.
     // Returns an empty array when the user cancels.
-    function OpenFile(const AFileName: String;
+    Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; virtual; abstract;
     // Write support
-    function CanWrite: Boolean; virtual;
-    function MultiLayerSupport: Boolean; virtual;
-    procedure SaveLayer(const AFileName: String; const ALayer: TLayer); virtual;
-    procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); virtual;
+    Function CanWrite: Boolean; virtual;
+    Function MultiLayerSupport: Boolean; virtual;
+    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); virtual;
+    Procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); virtual;
   end;
 
   TESRIFileFormat = class(TGISFileFormat)
   public
-    function Name: String; override;
-    function Extensions: TArray<String>; override;
-    function OpenFile(const AFileName: String;
+    Function Name: String; override;
+    Function Extensions: TArray<String>; override;
+    Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; override;
-    function CanWrite: Boolean; override;
-    procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
+    Function CanWrite: Boolean; override;
+    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
   end;
 
   TGeoJSONFileFormat = class(TGISFileFormat)
   public
-    function Name: String; override;
-    function Extensions: TArray<String>; override;
-    function OpenFile(const AFileName: String;
+    Function Name: String; override;
+    Function Extensions: TArray<String>; override;
+    Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; override;
-    function CanWrite: Boolean; override;
-    procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
+    Function CanWrite: Boolean; override;
+    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
   end;
 
   TGeoPackageFileFormat = class(TGISFileFormat)
   private
-    function SelectLayer(const AFileName: String;
+    Function SelectLayer(const AFileName: String;
                          const ACoordSystems: TArray<TGISCoordinateSystem>;
                          out ALayerName: String;
                          out ACoordSystem: TGISCoordinateSystem): Boolean;
   public
-    function Name: String; override;
-    function Extensions: TArray<String>; override;
-    function OpenFile(const AFileName: String;
+    Function Name: String; override;
+    Function Extensions: TArray<String>; override;
+    Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; override;
-    function CanWrite: Boolean; override;
-    function MultiLayerSupport: Boolean; override;
-    procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
-    procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); override;
+    Function CanWrite: Boolean; override;
+    Function MultiLayerSupport: Boolean; override;
+    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
+    Procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); override;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-{ TGISFileFormat }
-
-function TGISFileFormat.DialogFilter: String;
+Function TGISFileFormat.DialogFilter: String;
 var
   ExtStr: String;
 begin
@@ -103,7 +100,7 @@ begin
   Result := Name + '|' + ExtStr;
 end;
 
-function TGISFileFormat.Handles(const AExtension: String): Boolean;
+Function TGISFileFormat.Handles(const AExtension: String): Boolean;
 begin
   for var Ext in Extensions do
     if SameText(Ext, AExtension) then
@@ -111,8 +108,7 @@ begin
   Result := False;
 end;
 
-function TGISFileFormat.SelectCoordSystem(
-  const ACoordSystems: TArray<TGISCoordinateSystem>): TGISCoordinateSystem;
+Function TGISFileFormat.SelectCoordSystem(const ACoordSystems: TArray<TGISCoordinateSystem>): TGISCoordinateSystem;
 var
   Dialog: TForm;
   Prompt: TLabel;
@@ -159,41 +155,41 @@ begin
   end;
 end;
 
-function TGISFileFormat.CanWrite: Boolean;
+Function TGISFileFormat.CanWrite: Boolean;
 begin
   Result := False;
 end;
 
-function TGISFileFormat.MultiLayerSupport: Boolean;
+Function TGISFileFormat.MultiLayerSupport: Boolean;
 begin
   Result := False;
 end;
 
-procedure TGISFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
+Procedure TGISFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
 begin
   raise Exception.CreateFmt('%s does not support writing', [Name]);
 end;
 
-procedure TGISFileFormat.SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>);
+Procedure TGISFileFormat.SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>);
 begin
   raise Exception.CreateFmt('%s does not support multi-layer writing', [Name]);
 end;
 
-{ TESRIFileFormat }
+////////////////////////////////////////////////////////////////////////////////
 
-function TESRIFileFormat.Name: String;
+Function TESRIFileFormat.Name: String;
 begin
   Result := 'ESRI Shapefile';
 end;
 
-function TESRIFileFormat.Extensions: TArray<String>;
+Function TESRIFileFormat.Extensions: TArray<String>;
 begin
   Result := ['.shp'];
 end;
 
-function TESRIFileFormat.OpenFile(const AFileName: String;
-  const ACoordSystems: TArray<TGISCoordinateSystem>;
-  const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
+Function TESRIFileFormat.OpenFile(const AFileName: String;
+                                  const ACoordSystems: TArray<TGISCoordinateSystem>;
+                                  const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
 var
   CS: TGISCoordinateSystem;
   Shapes: TLabeledShapesLayer;
@@ -207,12 +203,12 @@ begin
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
 end;
 
-function TESRIFileFormat.CanWrite: Boolean;
+Function TESRIFileFormat.CanWrite: Boolean;
 begin
   Result := True;
 end;
 
-procedure TESRIFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
+Procedure TESRIFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
 var
   I: Integer;
   Shape: TGISShape;
@@ -280,21 +276,21 @@ begin
   end;
 end;
 
-{ TGeoJSONFileFormat }
+////////////////////////////////////////////////////////////////////////////////
 
-function TGeoJSONFileFormat.Name: String;
+Function TGeoJSONFileFormat.Name: String;
 begin
   Result := 'GeoJSON';
 end;
 
-function TGeoJSONFileFormat.Extensions: TArray<String>;
+Function TGeoJSONFileFormat.Extensions: TArray<String>;
 begin
   Result := ['.geojson'];
 end;
 
-function TGeoJSONFileFormat.OpenFile(const AFileName: String;
-  const ACoordSystems: TArray<TGISCoordinateSystem>;
-  const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
+Function TGeoJSONFileFormat.OpenFile(const AFileName: String;
+                                     const ACoordSystems: TArray<TGISCoordinateSystem>;
+                                     const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
 var
   CS: TGISCoordinateSystem;
   Shapes: TLabeledShapesLayer;
@@ -308,12 +304,12 @@ begin
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
 end;
 
-function TGeoJSONFileFormat.CanWrite: Boolean;
+Function TGeoJSONFileFormat.CanWrite: Boolean;
 begin
   Result := True;
 end;
 
-procedure TGeoJSONFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
+Procedure TGeoJSONFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
 var
   I: Integer;
 begin
@@ -326,11 +322,12 @@ begin
   end;
 end;
 
-{ TGeoPackageFileFormat }
+////////////////////////////////////////////////////////////////////////////////
 
-function TGeoPackageFileFormat.SelectLayer(const AFileName: String;
-  const ACoordSystems: TArray<TGISCoordinateSystem>;
-  out ALayerName: String; out ACoordSystem: TGISCoordinateSystem): Boolean;
+Function TGeoPackageFileFormat.SelectLayer(const AFileName: String;
+                                           const ACoordSystems: TArray<TGISCoordinateSystem>;
+                                           out ALayerName: String;
+                                           out ACoordSystem: TGISCoordinateSystem): Boolean;
 var
   Pkg: TGeopackage;
   Dialog: TForm;
@@ -405,19 +402,19 @@ begin
   end;
 end;
 
-function TGeoPackageFileFormat.Name: String;
+Function TGeoPackageFileFormat.Name: String;
 begin
   Result := 'GeoPackage';
 end;
 
-function TGeoPackageFileFormat.Extensions: TArray<String>;
+Function TGeoPackageFileFormat.Extensions: TArray<String>;
 begin
   Result := ['.gpkg'];
 end;
 
-function TGeoPackageFileFormat.OpenFile(const AFileName: String;
-  const ACoordSystems: TArray<TGISCoordinateSystem>;
-  const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
+Function TGeoPackageFileFormat.OpenFile(const AFileName: String;
+                                        const ACoordSystems: TArray<TGISCoordinateSystem>;
+                                        const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
 var
   LayerName: String;
   CS: TGISCoordinateSystem;
@@ -449,18 +446,18 @@ begin
   end;
 end;
 
-function TGeoPackageFileFormat.CanWrite: Boolean;
+Function TGeoPackageFileFormat.CanWrite: Boolean;
 begin
   Result := True;
 end;
 
-function TGeoPackageFileFormat.MultiLayerSupport: Boolean;
+Function TGeoPackageFileFormat.MultiLayerSupport: Boolean;
 begin
   Result := True;
 end;
 
-procedure TGeoPackageFileFormat.SaveLayer(const AFileName: String;
-  const ALayer: TLayer);
+Procedure TGeoPackageFileFormat.SaveLayer(const AFileName: String;
+                                          const ALayer: TLayer);
 var
   LayerName: String;
 begin
@@ -491,8 +488,8 @@ begin
   end;
 end;
 
-procedure TGeoPackageFileFormat.SaveLayers(const AFileName: String;
-  const ALayers: TArray<TLayer>);
+Procedure TGeoPackageFileFormat.SaveLayers(const AFileName: String;
+                                           const ALayers: TArray<TLayer>);
 var
   Pkg: TGeopackage;
   Writer: TGeopackageWriter;
