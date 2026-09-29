@@ -129,6 +129,7 @@ type
       DisplayCoordConverter: TCoordinateConverter;
       FileFormats:       TArray<TGISFileFormat>;
       CoordinateSystems: TArray<TGISCoordinateSystem>;
+    Function  CreateDisabledImages(const Images: TImageList): TImageList;
     Function  ActiveConverter: TCustomPixelConverter;
     Function  WorldBBox: TCoordinateRect;
     Function  AllLayersBBox: TCoordinateRect;
@@ -159,7 +160,11 @@ Const
   // toolbar wraps silently when this is too small, hiding the last buttons.
   ExpandedLayerPanelWidth = 216;
 
-Function CreateDisabledImages(const Images: TImageList; const Owner: TComponent): TImageList;
+////////////////////////////////////////////////////////////////////////////////
+// TMainForm helpers
+////////////////////////////////////////////////////////////////////////////////
+
+Function TMainForm.CreateDisabledImages(const Images: TImageList): TImageList;
 // A toolbar draws a disabled button's image from its DisabledImages. Without
 // them a themed toolbar draws the image desaturated, which leaves a black icon
 // black. These are the images grayed and faded, as disabled icons usually look.
@@ -168,7 +173,7 @@ Const
 var
   Image,Mask: TBitmap;
 begin
-  Result := TImageList.Create(Owner);
+  Result := TImageList.Create(Self);
   Result.ColorDepth   := cd32Bit;
   Result.DrawingStyle := Images.DrawingStyle;
   Result.SetSize(Images.Width,Images.Height);
@@ -218,10 +223,6 @@ begin
     Mask.Free;
   end;
 end;
-
-////////////////////////////////////////////////////////////////////////////////
-// TMainForm helpers
-////////////////////////////////////////////////////////////////////////////////
 
 Function TMainForm.ActiveConverter: TCustomPixelConverter;
 begin
@@ -375,7 +376,7 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   TFDGUIxWaitCursor.Create(Self);  // required by FireDAC; owned by form
-  GISToolBar.DisabledImages    := CreateDisabledImages(ImageList,Self);
+  GISToolBar.DisabledImages    := CreateDisabledImages(ImageList);  // owned by the form
   LayersToolBar.DisabledImages := GISToolBar.DisabledImages;
   DragAcceptFiles(Handle,true);
   Screen.Cursors[crZoomIn]  := LoadCursor(HInstance,'ZOOM_IN');

@@ -179,9 +179,40 @@ begin
   raise Exception.CreateFmt('%s does not support multi-layer writing', [Name]);
 end;
 
-// ---- ESRI write helpers -----------------------------------------------------
+{ TESRIFileFormat }
 
-procedure WriteESRILayer(const AFileName: String; const ALayer: TLayer);
+function TESRIFileFormat.Name: String;
+begin
+  Result := 'ESRI Shapefile';
+end;
+
+function TESRIFileFormat.Extensions: TArray<String>;
+begin
+  Result := ['.shp'];
+end;
+
+function TESRIFileFormat.OpenFile(const AFileName: String;
+  const ACoordSystems: TArray<TGISCoordinateSystem>;
+  const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
+var
+  CS: TGISCoordinateSystem;
+  Shapes: TLabeledShapesLayer;
+begin
+  SetLength(Result, 0);
+  CS := SelectCoordSystem(ACoordSystems);
+  if CS = nil then Exit;
+  Shapes := TLabeledShapesLayer.Create;
+  Shapes.Read(AFileName, TESRIShapeFileReader);
+  SetLength(Result, 1);
+  Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
+end;
+
+function TESRIFileFormat.CanWrite: Boolean;
+begin
+  Result := True;
+end;
+
+procedure TESRIFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
 var
   I: Integer;
   Shape: TGISShape;
@@ -247,44 +278,6 @@ begin
         end;
       end;
   end;
-end;
-
-{ TESRIFileFormat }
-
-function TESRIFileFormat.Name: String;
-begin
-  Result := 'ESRI Shapefile';
-end;
-
-function TESRIFileFormat.Extensions: TArray<String>;
-begin
-  Result := ['.shp'];
-end;
-
-function TESRIFileFormat.OpenFile(const AFileName: String;
-  const ACoordSystems: TArray<TGISCoordinateSystem>;
-  const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
-var
-  CS: TGISCoordinateSystem;
-  Shapes: TLabeledShapesLayer;
-begin
-  SetLength(Result, 0);
-  CS := SelectCoordSystem(ACoordSystems);
-  if CS = nil then Exit;
-  Shapes := TLabeledShapesLayer.Create;
-  Shapes.Read(AFileName, TESRIShapeFileReader);
-  SetLength(Result, 1);
-  Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
-end;
-
-function TESRIFileFormat.CanWrite: Boolean;
-begin
-  Result := True;
-end;
-
-procedure TESRIFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
-begin
-  WriteESRILayer(AFileName, ALayer);
 end;
 
 { TGeoJSONFileFormat }
