@@ -71,6 +71,9 @@ type
     ToolButton1: TToolButton;
     ToolButton7: TToolButton;
     ToolButton15: TToolButton;
+    BackgroundPanel: TPanel;
+    BackgroundLabel: TLabel;
+    BackgroundColorPanel: TPanel;
     procedure AddLayerAccept(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure ZoomInExecute(Sender: TObject);
@@ -98,6 +101,7 @@ type
     procedure SaveImageExecute(Sender: TObject);
     procedure SaveLayerExecute(Sender: TObject);
     procedure SaveLayersExecute(Sender: TObject);
+    procedure BackgroundColorPanelClick(Sender: TObject);
   private
     Const
       crZoomIn  = 1;
@@ -115,6 +119,7 @@ type
       ViewportChanged: Boolean;
       LayoutChanged: Boolean;
       Repainting: Boolean;
+      BackgroundColor: TColor;
       DisplayCoordConverter: TCoordinateConverter;
       FileFormats:       TArray<TGISFileFormat>;
       CoordinateSystems: TArray<TGISCoordinateSystem>;
@@ -122,6 +127,7 @@ type
     Function  WorldBBox: TCoordinateRect;
     Function  AllLayersBBox: TCoordinateRect;
     Procedure UpdateSelectedLayerPanel;
+    Procedure UpdateMinHeight;
     Procedure LayerPropertyChanged(Sender: TObject);
     Procedure MercatorConverterChanged(Sender: TObject);
     Procedure OpenShapeFile(const FileName: String);
@@ -215,12 +221,32 @@ begin
       Ctrl.LoadFrom(Layers[Idx]);
       Ctrl.OnChange              := LayerPropertyChanged;
       Ctrl.Parent                := SelectedLayerPanel;
-      SelectedLayerPanel.Height  := Ctrl.Height;   // resize before alClient stretches
       Ctrl.Align                 := alClient;
+      // Give the control the height it needs; the list box above gets what is
+      // left, and scrolls. Keep the bottom edge above BackgroundPanel:
+      // bottom-aligned panels are stacked by their bottom edge.
+      var PanelHeight := Ctrl.RequiredHeight +
+                         SelectedLayerPanel.Height - SelectedLayerPanel.ClientHeight;
+      SelectedLayerPanel.SetBounds(0,BackgroundPanel.Top-PanelHeight,
+                                   SelectedLayerPanel.Width,PanelHeight);
+      UpdateMinHeight;
     end;
     SelectedLayerPanel.Enabled := true;
   end else
     SelectedLayerPanel.Enabled := false;
+end;
+
+Procedure TMainForm.UpdateMinHeight;
+// The layer list box gives up its height to the selected layer's panel and
+// scrolls instead, but it cannot scroll once it has no height left. So keep
+// the form tall enough for a few rows, plus a row's worth for the border.
+Const
+  MinLayerRows = 3;
+begin
+  Constraints.MinHeight := (Height - ClientHeight) + CoordPanel.Height +
+                           LayersToolBar.Height + SelectedLayerPanel.Height +
+                           BackgroundPanel.Height +
+                           (MinLayerRows+1)*LayerListBox.ItemHeight;
 end;
 
 Procedure TMainForm.LayerPropertyChanged(Sender: TObject);
@@ -231,6 +257,8 @@ end;
 
 Procedure TMainForm.AddGISLayer(const ALayer: TLayer);
 begin
+  if ALayer.RenderingControl = nil then
+    ALayer.RenderingControl := TDefaultLayerRenderingControl.Create(nil);  // owned by the layer
   Layers.Add(ALayer);
   LayerListBox.Items.Add(ALayer.Name);
   LayerListBox.ItemIndex := LayerListBox.Count-1;
@@ -286,6 +314,7 @@ begin
   LayerImage  := TBitmap.Create;
   OSMLayer    := TOpenStreetMapLayer.Create;
   Layers      := TObjectList<TLayer>.Create(true);
+  BackgroundColor := BackgroundColorPanel.Color;
   ViewportChanged := true;
   // Registered coordinate systems - extend here to add more
   CoordinateSystems := [
@@ -331,6 +360,7 @@ end;
 
 procedure TMainForm.FormShow(Sender: TObject);
 begin
+  UpdateMinHeight;
   ZoomAllExecute(nil);
 end;
 
@@ -523,6 +553,25 @@ end;
 
 procedure TMainForm.RemoveLayerBtnClick(Sender: TObject);
 begin
+end;
+
+procedure TMainForm.BackgroundColorPanelClick(Sender: TObject);
+var
+  Dlg: TColorDialog;
+begin
+  Dlg := TColorDialog.Create(nil);
+  try
+    Dlg.Color := BackgroundColor;
+    if Dlg.Execute then
+    begin
+      BackgroundColor            := Dlg.Color;
+      BackgroundColorPanel.Color := Dlg.Color;
+      LayoutChanged := true;
+      PaintBox.Invalidate;
+    end;
+  finally
+    Dlg.Free;
+  end;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -719,7 +768,7 @@ begin
         try
           ShapesImage.Width  := PaintBox.ClientWidth;
           ShapesImage.Height := PaintBox.ClientHeight;
-          ShapesImage.Canvas.Brush.Color := clWhite;
+          ShapesImage.Canvas.Brush.Color := BackgroundColor;
           ShapesImage.Canvas.FillRect(Rect(0,0,ShapesImage.Width,ShapesImage.Height));
           if OSMActive then
             OSMLayer.DrawLayer(GISCanvas(ShapesImage),MercatorConverter);
@@ -734,6 +783,9 @@ begin
                                                      Layer.PenWidth,GISPenStyle(Layer.PenStyle));
               LayerStyle.Fill   := TGISFill.Create(AlphaColor(Layer.BrushColor),
                                                    GISBrushStyle(Layer.BrushStyle));
+              // The canvas takes a font size in pixels, the layer a point size
+              LayerStyle.Text.Size  := Layer.TextSize*CurrentPPI/72;
+              LayerStyle.Text.Color := AlphaColor(Layer.TextColor);
               Layer.Shapes.Style := LayerStyle;
               Layer.Shapes.DrawLayer(GISCanvas(LayerImage),Layer.Converter);
               ShapesImage.Canvas.Draw(0,0,LayerImage,Layer.Opacity);

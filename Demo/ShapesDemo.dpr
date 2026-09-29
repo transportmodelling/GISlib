@@ -13,7 +13,7 @@ uses
   Vcl.Themes,
   Vcl.Styles,
   RndrCtrl in 'RndrCtrl.pas' {LayerRenderingControl: TFrame},
-  RndrCtrl.Default in 'RndrCtrl.Default.pas' {TDefaultLayerRenderingControl: TFrame};
+  RndrCtrl.Default in 'RndrCtrl.Default.pas' {DefaultLayerRenderingControl: TFrame};
 
 {$R *.res}
 

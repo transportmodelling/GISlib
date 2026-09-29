@@ -64,18 +64,49 @@ object MainForm: TMainForm
       TabOrder = 1
       object SelectedLayerPanel: TPanel
         Left = 0
-        Top = 456
+        Top = 424
         Width = 196
         Height = 339
         Align = alBottom
         Enabled = False
         TabOrder = 0
       end
+      object BackgroundPanel: TPanel
+        Left = 0
+        Top = 763
+        Width = 196
+        Height = 32
+        Align = alBottom
+        BevelOuter = bvNone
+        TabOrder = 3
+        object BackgroundLabel: TLabel
+          Left = 8
+          Top = 10
+          Width = 76
+          Height = 13
+          Caption = 'Map background'
+        end
+        object BackgroundColorPanel: TPanel
+          Left = 109
+          Top = 3
+          Width = 65
+          Height = 26
+          Hint = 'Color of the map where no layer or tile covers it'
+          BevelOuter = bvLowered
+          Color = clWhite
+          ParentBackground = False
+          ParentShowHint = False
+          ShowHint = True
+          TabOrder = 0
+          StyleElements = [seFont, seBorder]
+          OnClick = BackgroundColorPanelClick
+        end
+      end
       object LayerListBox: TListBox
         Left = 0
         Top = 29
         Width = 196
-        Height = 427
+        Height = 395
         Align = alClient
         ItemHeight = 13
         TabOrder = 1

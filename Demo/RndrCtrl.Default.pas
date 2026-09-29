@@ -14,10 +14,16 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
-  Vcl.Samples.Spin, Vcl.ComCtrls, Vcl.ExtCtrls, RndrCtrl, GIS.Render.Shapes;
+  Vcl.Samples.Spin, Vcl.ComCtrls, Vcl.ExtCtrls, RndrCtrl, GIS.Shapes, GIS.Render.Shapes;
 
 type
-  TTDefaultLayerRenderingControl = class(TLayerRenderingControl)
+  TDefaultLayerRenderingControl = class(TLayerRenderingControl)
+    GeneralSection: TPanel;
+    PenSection: TPanel;
+    BrushSection: TPanel;
+    PointsSection: TPanel;
+    LabelsSection: TPanel;
+    CoordSystemSection: TPanel;
     BrushColorPanel: TPanel;
     BrushLabel: TLabel;
     BrushStyleCombo: TComboBox;
@@ -33,6 +39,10 @@ type
     PointLabel: TLabel;
     PointComboBox: TComboBox;
     PointSizeSpinEdit: TSpinEdit;
+    LabelsLabel: TLabel;
+    LabelSourceCombo: TComboBox;
+    TextColorPanel: TPanel;
+    TextSizeSpinEdit: TSpinEdit;
     procedure VisibleCheckBoxClick(Sender: TObject);
     procedure OpacityTrackBarChange(Sender: TObject);
     procedure PenColorPanelClick(Sender: TObject);
@@ -42,6 +52,18 @@ type
     procedure BrushStyleComboChange(Sender: TObject);
     procedure PointComboBoxChange(Sender: TObject);
     procedure PointSizeSpinEditChange(Sender: TObject);
+    procedure LabelSourceComboChange(Sender: TObject);
+    procedure TextColorPanelClick(Sender: TObject);
+    procedure TextSizeSpinEditChange(Sender: TObject);
+  private
+    Const
+      // The styles offered, in the order of PointComboBox's items. rsBitmap is
+      // left out: it needs an image, and the demo has no way to pick one.
+      PointStyles: array[0..11] of TPointRenderStyle = (
+        rsCircle,rsSquare,rsTriangleUp,rsTriangleDown,
+        rsStation_18dp,rsStation_24dp,rsStation_36dp,rsStation_48dp,
+        rsAirport_18dp,rsAirport_24dp,rsAirport_36dp,rsAirport_48dp);
+    Function SelectColor(const ColorPanel: TPanel; var Color: TColor): Boolean;
   public
     Procedure LoadFrom(ALayer: TLayer); override;
   end;
@@ -52,7 +74,7 @@ implementation
 
 {$R *.dfm}
 
-Procedure TTDefaultLayerRenderingControl.LoadFrom(ALayer: TLayer);
+Procedure TDefaultLayerRenderingControl.LoadFrom(ALayer: TLayer);
 begin
   // Bind to layer first so event handlers can safely reference Layer
   // while the controls below are being populated.
@@ -65,11 +87,68 @@ begin
   BrushColorPanel.Color     := ALayer.BrushColor;
   BrushStyleCombo.ItemIndex := Ord(ALayer.BrushStyle);
   EditCoordinateSystem.Text := ALayer.CoordSystem.Name;
-  PointComboBox.ItemIndex  := Ord(ALayer.Shapes.PointRenderStyle);
-  PointSizeSpinEdit.Value  := ALayer.Shapes.PointRenderSize;
+  PointComboBox.ItemIndex   := -1;
+  for var Style := Low(PointStyles) to High(PointStyles) do
+    if PointStyles[Style] = ALayer.Shapes.PointRenderStyle then
+      PointComboBox.ItemIndex := Style;
+  // A symbol is drawn at the size of its image
+  PointSizeSpinEdit.Enabled := ALayer.Shapes.PointRenderStyle < rsBitmap;
+  PointSizeSpinEdit.Value   := ALayer.Shapes.PointRenderSize;
+  // The label source items map onto TLabeledShapesLayer.LabelSource + 2
+  LabelSourceCombo.Items.BeginUpdate;
+  try
+    LabelSourceCombo.Items.Clear;
+    LabelSourceCombo.Items.Add('None');
+    LabelSourceCombo.Items.Add('Feature number');
+    for var Field in ALayer.Shapes.FieldNames do
+      LabelSourceCombo.Items.Add(Field);
+  finally
+    LabelSourceCombo.Items.EndUpdate;
+  end;
+  LabelSourceCombo.ItemIndex := ALayer.Shapes.LabelSource + 2;
+  TextColorPanel.Color       := ALayer.TextColor;
+  TextSizeSpinEdit.Value     := ALayer.TextSize;
+  // Show only the sections that apply to the shapes in the layer: points are
+  // outlined with the pen and filled with the brush, and only polygons are
+  // labelled
+  var Points   := ALayer.Shapes.ShapeCount(stPoint) > 0;
+  var Lines    := ALayer.Shapes.ShapeCount(stLine) > 0;
+  var Polygons := ALayer.Shapes.ShapeCount(stPolygon) > 0;
+  PenSection.Visible    := Points or Lines or Polygons;
+  BrushSection.Visible  := Points or Polygons;
+  PointsSection.Visible := Points;
+  LabelsSection.Visible := Polygons;
+  // Stack the visible sections without gaps
+  var Y := 0;
+  for var Section in [GeneralSection,PenSection,BrushSection,PointsSection,
+                      LabelsSection,CoordSystemSection] do
+    if Section.Visible then
+    begin
+      Section.Top := Y;
+      Inc(Y,Section.Height);
+    end;
 end;
 
-procedure TTDefaultLayerRenderingControl.VisibleCheckBoxClick(Sender: TObject);
+Function TDefaultLayerRenderingControl.SelectColor(const ColorPanel: TPanel;
+                                                   var Color: TColor): Boolean;
+var
+  Dlg: TColorDialog;
+begin
+  Dlg := TColorDialog.Create(nil);
+  try
+    Dlg.Color := Color;
+    Result := Dlg.Execute;
+    if Result then
+    begin
+      Color            := Dlg.Color;
+      ColorPanel.Color := Dlg.Color;
+    end;
+  finally
+    Dlg.Free;
+  end;
+end;
+
+procedure TDefaultLayerRenderingControl.VisibleCheckBoxClick(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -78,7 +157,7 @@ begin
   end;
 end;
 
-procedure TTDefaultLayerRenderingControl.OpacityTrackBarChange(Sender: TObject);
+procedure TDefaultLayerRenderingControl.OpacityTrackBarChange(Sender: TObject);
 begin
   if (Layer <> nil) and (OpacityTrackbar.Position <> Layer.Opacity) then
   begin
@@ -87,26 +166,12 @@ begin
   end;
 end;
 
-procedure TTDefaultLayerRenderingControl.PenColorPanelClick(Sender: TObject);
-var
-  Dlg: TColorDialog;
+procedure TDefaultLayerRenderingControl.PenColorPanelClick(Sender: TObject);
 begin
-  if Layer = nil then Exit;
-  Dlg := TColorDialog.Create(nil);
-  try
-    Dlg.Color := Layer.PenColor;
-    if Dlg.Execute then
-    begin
-      Layer.PenColor    := Dlg.Color;
-      PenColorPanel.Color := Dlg.Color;
-      Changed;
-    end;
-  finally
-    Dlg.Free;
-  end;
+  if (Layer <> nil) and SelectColor(PenColorPanel,Layer.PenColor) then Changed;
 end;
 
-procedure TTDefaultLayerRenderingControl.PenStyleComboChange(Sender: TObject);
+procedure TDefaultLayerRenderingControl.PenStyleComboChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -115,7 +180,7 @@ begin
   end;
 end;
 
-procedure TTDefaultLayerRenderingControl.PenWidthSpinEditChange(Sender: TObject);
+procedure TDefaultLayerRenderingControl.PenWidthSpinEditChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -124,16 +189,19 @@ begin
   end;
 end;
 
-procedure TTDefaultLayerRenderingControl.PointComboBoxChange(Sender: TObject);
+procedure TDefaultLayerRenderingControl.PointComboBoxChange(Sender: TObject);
 begin
-  if Layer <> nil then
+  if (Layer <> nil) and (PointComboBox.ItemIndex >= 0) then
   begin
-    Layer.Shapes.PointRenderStyle := TPointRenderStyle(PointComboBox.ItemIndex);
+    Layer.Shapes.PointRenderStyle := PointStyles[PointComboBox.ItemIndex];
+    // A symbol sets the point size to that of its image
+    PointSizeSpinEdit.Enabled := Layer.Shapes.PointRenderStyle < rsBitmap;
+    PointSizeSpinEdit.Value   := Layer.Shapes.PointRenderSize;
     Changed;
   end;
 end;
 
-procedure TTDefaultLayerRenderingControl.PointSizeSpinEditChange(Sender: TObject);
+procedure TDefaultLayerRenderingControl.PointSizeSpinEditChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
@@ -142,30 +210,39 @@ begin
   end;
 end;
 
-procedure TTDefaultLayerRenderingControl.BrushColorPanelClick(Sender: TObject);
-var
-  Dlg: TColorDialog;
+procedure TDefaultLayerRenderingControl.BrushColorPanelClick(Sender: TObject);
 begin
-  if Layer = nil then Exit;
-  Dlg := TColorDialog.Create(nil);
-  try
-    Dlg.Color := Layer.BrushColor;
-    if Dlg.Execute then
-    begin
-      Layer.BrushColor      := Dlg.Color;
-      BrushColorPanel.Color := Dlg.Color;
-      Changed;
-    end;
-  finally
-    Dlg.Free;
-  end;
+  if (Layer <> nil) and SelectColor(BrushColorPanel,Layer.BrushColor) then Changed;
 end;
 
-procedure TTDefaultLayerRenderingControl.BrushStyleComboChange(Sender: TObject);
+procedure TDefaultLayerRenderingControl.BrushStyleComboChange(Sender: TObject);
 begin
   if Layer <> nil then
   begin
     Layer.BrushStyle := TBrushStyle(BrushStyleCombo.ItemIndex);
+    Changed;
+  end;
+end;
+
+procedure TDefaultLayerRenderingControl.LabelSourceComboChange(Sender: TObject);
+begin
+  if (Layer <> nil) and (LabelSourceCombo.ItemIndex >= 0) then
+  begin
+    Layer.Shapes.LabelSource := LabelSourceCombo.ItemIndex - 2;
+    Changed;
+  end;
+end;
+
+procedure TDefaultLayerRenderingControl.TextColorPanelClick(Sender: TObject);
+begin
+  if (Layer <> nil) and SelectColor(TextColorPanel,Layer.TextColor) then Changed;
+end;
+
+procedure TDefaultLayerRenderingControl.TextSizeSpinEditChange(Sender: TObject);
+begin
+  if Layer <> nil then
+  begin
+    Layer.TextSize := TextSizeSpinEdit.Value;
     Changed;
   end;
 end;

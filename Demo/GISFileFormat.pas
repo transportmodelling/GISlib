@@ -266,12 +266,12 @@ function TESRIFileFormat.OpenFile(const AFileName: String;
   const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
 var
   CS: TGISCoordinateSystem;
-  Shapes: TShapesLayer;
+  Shapes: TLabeledShapesLayer;
 begin
   SetLength(Result, 0);
   CS := SelectCoordSystem(ACoordSystems);
   if CS = nil then Exit;
-  Shapes := TShapesLayer.Create;
+  Shapes := TLabeledShapesLayer.Create;
   Shapes.Read(AFileName, TESRIShapeFileReader);
   SetLength(Result, 1);
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
@@ -304,12 +304,12 @@ function TGeoJSONFileFormat.OpenFile(const AFileName: String;
   const APrimary: TWebMercatorPixelConverter): TArray<TLayer>;
 var
   CS: TGISCoordinateSystem;
-  Shapes: TShapesLayer;
+  Shapes: TLabeledShapesLayer;
 begin
   SetLength(Result, 0);
   CS := SelectCoordSystem(ACoordSystems);
   if CS = nil then Exit;
-  Shapes := TShapesLayer.Create;
+  Shapes := TLabeledShapesLayer.Create;
   Shapes.Read(AFileName, TGeoJSONReader);
   SetLength(Result, 1);
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
@@ -430,7 +430,7 @@ var
   CS: TGISCoordinateSystem;
   Pkg: TGeopackage;
   Reader: TGeopackageReader;
-  Shapes: TShapesLayer;
+  Shapes: TLabeledShapesLayer;
   Shape: TGISShape;
   Props: TGISShapeProperties;
 begin
@@ -440,9 +440,9 @@ begin
   try
     Reader := Pkg.CreateReader(LayerName);
     try
-      Shapes := TShapesLayer.Create;
+      Shapes := TLabeledShapesLayer.Create;
       while Reader.ReadShape(Shape, Props) do
-        Shapes.Add(Shape);
+        Shapes.Add(Shape, Props);
       SetLength(Result, 1);
       Result[0] := TLayer.Create(
         Shapes,

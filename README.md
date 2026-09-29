@@ -85,7 +85,11 @@ The repository includes a demo application that exercises the full library:
 - Toggle the OpenStreetMap background on or off
 - Select a coordinate system for the status-bar coordinate display (WGS84, Dutch
   Grid, Web Mercator, or UTM with a zone picker)
-- Per-layer properties panel: visibility, opacity, pen and brush settings, point size and style
+- Per-layer properties panel: visibility, opacity, pen and brush settings, point
+  size and style (including the built-in station and airport symbols), and
+  polygon labels from the feature number or an attribute field, with their text
+  color and size
+- Map background color
 - Reorder, remove and save layers
 - Export the current map view as a PNG or BMP image
 
