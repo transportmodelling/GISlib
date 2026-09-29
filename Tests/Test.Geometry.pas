@@ -14,7 +14,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  DUnitX.TestFramework, GIS;
+  DUnitX.TestFramework, GIS, GIS.Shapes;
 
 type
   [TestFixture]
@@ -52,6 +52,26 @@ type
     [Test] procedure IntersectsWith_OverlappingRectsReturnsTrue;
     [Test] procedure IntersectsWith_NonOverlappingReturnsFalse;
     [Test] procedure IntersectsWith_TouchingReturnsFalse;
+  end;
+
+  [TestFixture]
+  TCoordinateTests = class
+  public
+    [Test] Procedure Distance_IsEuclidean;
+    [Test] Procedure SqrDistance_IsSquareOfDistance;
+  end;
+
+  [TestFixture]
+  TShapePartTests = class
+  private
+    // An L-shaped ring over the unit squares with lower left corners (0,0),
+    // (0,1) and (1,1): the square at (1,0) is missing
+    Function LShape: TShapePart;
+  public
+    [Test] Procedure Contains_PointInsideSquare;
+    [Test] Procedure Contains_PointOutsideSquare;
+    [Test] Procedure Contains_PointInsideLShape;
+    [Test] Procedure Contains_PointInLShapeNotch;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -218,7 +238,62 @@ begin
   Assert.IsFalse(A.IntersectsWith(B));
 end;
 
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TCoordinateTests.Distance_IsEuclidean;
+begin
+  var A := TCoordinate.Create(1, 2);
+  var B := TCoordinate.Create(4, 6);
+  Assert.AreEqual(5.0, A.Distance(B), 1e-12);
+  Assert.AreEqual(5.0, B.Distance(A), 1e-12, 'Distance should be symmetric');
+end;
+
+Procedure TCoordinateTests.SqrDistance_IsSquareOfDistance;
+begin
+  var A := TCoordinate.Create(1, 2);
+  var B := TCoordinate.Create(4, 6);
+  Assert.AreEqual(25.0, A.SqrDistance(B), 1e-12);
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Function TShapePartTests.LShape: TShapePart;
+begin
+  Result := TShapePart.Create([TCoordinate.Create(0, 0), TCoordinate.Create(1, 0),
+                               TCoordinate.Create(1, 1), TCoordinate.Create(2, 1),
+                               TCoordinate.Create(2, 2), TCoordinate.Create(0, 2)], true);
+end;
+
+Procedure TShapePartTests.Contains_PointInsideSquare;
+begin
+  var Square := TShapePart.Create([TCoordinate.Create(0, 0), TCoordinate.Create(1, 0),
+                                   TCoordinate.Create(1, 1), TCoordinate.Create(0, 1)], true);
+  Assert.IsTrue(Square.Contains(TCoordinate.Create(0.5, 0.5)));
+end;
+
+Procedure TShapePartTests.Contains_PointOutsideSquare;
+begin
+  var Square := TShapePart.Create([TCoordinate.Create(0, 0), TCoordinate.Create(1, 0),
+                                   TCoordinate.Create(1, 1), TCoordinate.Create(0, 1)], true);
+  Assert.IsFalse(Square.Contains(TCoordinate.Create(1.5, 0.5)), 'Right of the square');
+  Assert.IsFalse(Square.Contains(TCoordinate.Create(0.5, 1.5)), 'Above the square');
+end;
+
+Procedure TShapePartTests.Contains_PointInsideLShape;
+begin
+  Assert.IsTrue(LShape.Contains(TCoordinate.Create(0.5, 0.5)), 'Lower square');
+  Assert.IsTrue(LShape.Contains(TCoordinate.Create(1.5, 1.5)), 'Upper right square');
+end;
+
+Procedure TShapePartTests.Contains_PointInLShapeNotch;
+begin
+  // Inside the ring's bounding box, but in the missing square
+  Assert.IsFalse(LShape.Contains(TCoordinate.Create(1.5, 0.5)));
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TCoordinateRectTests);
+  TDUnitX.RegisterTestFixture(TCoordinateTests);
+  TDUnitX.RegisterTestFixture(TShapePartTests);
 
 end.

@@ -64,7 +64,7 @@ type
     // nothing is left buffered in GDI+.
     procedure Render(const Draw: TProc<IGISCanvas>);
     function Pixel(const X,Y: Integer): TColor;
-    class function RedPngBytes(const Size: Integer): TBytes;
+    Function RedPngBytes(const Size: Integer): TBytes;
   public
     [Setup]    procedure Setup;
     [TearDown] procedure TearDown;
@@ -94,7 +94,7 @@ type
     // the bitmap and the corners are genuinely outside it.
     procedure RenderLayer;
     function Pixel(const X,Y: Integer): TColor;
-    class function DonutShape: TGISShape;
+    Function DonutShape: TGISShape;
   public
     [Setup]    procedure Setup;
     [TearDown] procedure TearDown;
@@ -239,7 +239,7 @@ begin
   Result := FBitmap.Canvas.Pixels[X,Y];
 end;
 
-class function TGdiPlusCanvasTests.RedPngBytes(const Size: Integer): TBytes;
+Function TGdiPlusCanvasTests.RedPngBytes(const Size: Integer): TBytes;
 begin
   var Png := TPngImage.CreateBlank(COLOR_RGB,8,Size,Size);
   var Stream := TBytesStream.Create;
@@ -402,7 +402,7 @@ end;
 
 { TShapesLayerRenderTests }
 
-class function TShapesLayerRenderTests.DonutShape: TGISShape;
+Function TShapesLayerRenderTests.DonutShape: TGISShape;
 // Outer ring -5..5 with a -1..1 hole, both centred on the origin
 var
   Parts: TMultiPoints;

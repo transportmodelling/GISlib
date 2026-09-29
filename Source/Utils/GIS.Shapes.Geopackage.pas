@@ -102,13 +102,13 @@ type
   // Writes TGISShape objects to a single feature layer in a GeoPackage file.
   // Create via TGeopackageWriter.CreateLayerWriter.
   private
-    Class procedure WriteByte  (Stream: TStream; Value: Byte);   static;
-    Class procedure WriteInt32LE(Stream: TStream; Value: Int32); static;
-    Class procedure WriteF64LE (Stream: TStream; Value: Double); static;
-    Class procedure WriteRing  (Stream: TStream; const Part: TShapePart); static;
-    Class procedure WritePointWKB(Stream: TStream; const Shape: TGISShape); static;
-    Class procedure WriteLineWKB(Stream: TStream; const Shape: TGISShape); static;
-    Class procedure WritePolygonWKB(Stream: TStream; const Shape: TGISShape); static;
+    Procedure WriteByte  (Stream: TStream; Value: Byte);
+    Procedure WriteInt32LE(Stream: TStream; Value: Int32);
+    Procedure WriteF64LE (Stream: TStream; Value: Double);
+    Procedure WriteRing  (Stream: TStream; const Part: TShapePart);
+    Procedure WritePointWKB(Stream: TStream; const Shape: TGISShape);
+    Procedure WriteLineWKB(Stream: TStream; const Shape: TGISShape);
+    Procedure WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
   private
     FConnection: TFDConnection;  // not owned — belongs to TGeopackageWriter
     FLayerName: String;
@@ -546,12 +546,12 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Class procedure TGeopackageLayerWriter.WriteByte(Stream: TStream; Value: Byte);
+Procedure TGeopackageLayerWriter.WriteByte(Stream: TStream; Value: Byte);
 begin
   Stream.WriteBuffer(Value,1);
 end;
 
-Class procedure TGeopackageLayerWriter.WriteInt32LE(Stream: TStream; Value: Int32);
+Procedure TGeopackageLayerWriter.WriteInt32LE(Stream: TStream; Value: Int32);
 var
   B: array[0..3] of Byte;
 begin
@@ -562,7 +562,7 @@ begin
   Stream.WriteBuffer(B,4);
 end;
 
-Class procedure TGeopackageLayerWriter.WriteF64LE(Stream: TStream; Value: Double);
+Procedure TGeopackageLayerWriter.WriteF64LE(Stream: TStream; Value: Double);
 var
   V: UInt64;
   B: array[0..7] of Byte;
@@ -579,7 +579,7 @@ begin
   Stream.WriteBuffer(B,8);
 end;
 
-Class procedure TGeopackageLayerWriter.WriteRing(Stream: TStream; const Part: TShapePart);
+Procedure TGeopackageLayerWriter.WriteRing(Stream: TStream; const Part: TShapePart);
 begin
   WriteInt32LE(Stream,Part.Count);
   for var Point := 0 to Part.Count-1 do
@@ -611,14 +611,14 @@ begin
   FQuery.SQL.Text := SQL;
 end;
 
-Class procedure TGeopackageLayerWriter.WritePointWKB(Stream: TStream; const Shape: TGISShape);
+Procedure TGeopackageLayerWriter.WritePointWKB(Stream: TStream; const Shape: TGISShape);
 begin
   WriteInt32LE(Stream,1);  // WKBPoint
   WriteF64LE(Stream,Shape[0,0].X);
   WriteF64LE(Stream,Shape[0,0].Y);
 end;
 
-Class procedure TGeopackageLayerWriter.WriteLineWKB(Stream: TStream; const Shape: TGISShape);
+Procedure TGeopackageLayerWriter.WriteLineWKB(Stream: TStream; const Shape: TGISShape);
 begin
   if Shape.Count = 1 then
   begin
@@ -637,7 +637,7 @@ begin
   end;
 end;
 
-Class procedure TGeopackageLayerWriter.WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
+Procedure TGeopackageLayerWriter.WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
 begin
   WriteInt32LE(Stream,3);  // WKBPolygon — all parts are rings
   WriteInt32LE(Stream,Shape.Count);

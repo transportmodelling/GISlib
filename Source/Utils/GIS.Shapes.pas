@@ -25,6 +25,8 @@ Type
     FPoints: TMultiPoint;
     FBoundingBox: TCoordinateRect;
     Function GetPoints(Point: Integer): TCoordinate; inline;
+    Function Intersecting(const Point,A,B: TCoordinate): Boolean;
+    Function NrIntersections(const [ref] Point: TCoordinate): Integer;
   public
     Constructor Create(const Points: array of TCoordinate; ClosePart: Boolean = false);
     Procedure Clear;
@@ -32,6 +34,8 @@ Type
     Function Count: Integer;
     Function BoundingBox: TCoordinateRect;
     Function AsMultiPoint: TMultiPoint;
+    // Whether the part, taken as a ring, encloses Point
+    Function Contains(const [ref] Point: TCoordinate): Boolean;
   public
     Property Points[Point: Integer]: TCoordinate read GetPoints; default;
   end;
@@ -141,6 +145,89 @@ end;
 Function TShapePart.AsMultiPoint: TMultiPoint;
 begin
   Result := Copy(FPoints);
+end;
+
+Function TShapePart.Intersecting(const Point,A,B: TCoordinate): Boolean;
+// Tests whether the line from Point to (infinity,Point.Y) and line segment AB intersect
+begin
+  if (A.Y > Point.Y) and (B.Y > Point.Y) then Result := false else // AB positioned above line
+  if (A.Y < Point.Y) and (B.Y < Point.Y) then Result := false else // AB positioned below line
+  if (A.X < Point.X) and (B.X < Point.X) then Result := false else // AB positioned to the left of line
+  if (A.X >= Point.X) and (B.X >= Point.X) then Result := true else
+  if (A.Y = Point.Y) and (B.Y = Point.Y) then Result := true else
+  if A.X < B.X then
+    if A.Y < B.Y then
+      Result := (Point.X-A.X)*(B.Y-A.Y) <= (Point.Y-A.Y)*(B.X-A.X)
+    else
+      Result := (Point.X-A.X)*(A.Y-B.Y) <= (A.Y-Point.Y)*(B.X-A.X)
+  else
+    if B.Y < A.Y then
+      Result := (Point.X-B.X)*(A.Y-B.Y) <= (Point.Y-B.Y)*(A.X-B.X)
+    else
+      Result := (Point.X-B.X)*(B.Y-A.Y) <= (B.Y-Point.Y)*(A.X-B.X);
+end;
+
+Function TShapePart.NrIntersections(const [ref] Point: TCoordinate): Integer;
+// Returns the number of intersection between the ring and the line from Point to (infinity,Point.Y).
+Const
+  Below = -1;
+  Above = +1;
+var
+  CurrentPoint,PreviousPoint: TCoordinate;
+begin
+  Result := 0;
+  if Count > 0 then
+  begin
+    // Find a vertex that is either above or below Point
+    var First := 0;
+    var Position := 0;
+    repeat
+      if FPoints[First].Y < Point.Y then Position := Below else
+      if FPoints[First].Y > Point.Y then Position := Above else
+      Inc(First);
+    until (Position <> 0) or (First = Count);
+   // Test whether edges intersect the line from Point to Point(infinite,Point.Y)
+    if First < Count then
+    begin
+      var Previous := First;
+      PreviousPoint := FPoints[First];
+      for var Vertex := 1 to Count do
+      begin
+        var Current := (First+Vertex) mod Count;
+        CurrentPoint := FPoints[Current];
+        if CurrentPoint.Y = PreviousPoint.Y then
+        begin
+          if CurrentPoint.Y = Point.Y then
+          if CurrentPoint.X < PreviousPoint.X then
+          begin
+           if (CurrentPoint.X <= Point.X) and (PreviousPoint.X >= Point.X) then Exit(1)
+          end else
+          begin
+            if (PreviousPoint.X <= Point.X) and (CurrentPoint.X >= Point.X) then Exit(1)
+          end;
+        end else
+        begin
+          if (Position = Above) and (CurrentPoint.Y < Point.Y) then
+          begin
+            Position := Below;
+            if Intersecting(Point,PreviousPoint,CurrentPoint) then Inc(Result)
+          end else
+          if (Position = Below) and (CurrentPoint.Y > Point.Y) then
+          begin
+            Position := Above;
+            if Intersecting(Point,PreviousPoint,CurrentPoint) then Inc(Result)
+          end;
+        end;
+        Previous := Current;
+        PreviousPoint := CurrentPoint;
+      end;
+    end;
+  end;
+end;
+
+Function TShapePart.Contains(const [ref] Point: TCoordinate): Boolean;
+begin
+  Result := ((NrIntersections(Point) mod 2) = 1);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////

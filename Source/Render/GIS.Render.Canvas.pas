@@ -38,9 +38,9 @@ Type
     Color: TAlphaColor;
     Width: Single;
     Style: TGISPenStyle;
-    Class Function Create(const Color: TAlphaColor;
-                          const Width: Single = 1.0;
-                          const Style: TGISPenStyle = gpsSolid): TGISStroke; static;
+    Constructor Create(const Color: TAlphaColor;
+                       const Width: Single = 1.0;
+                       const Style: TGISPenStyle = gpsSolid);
     Class Operator Equal(const Left,Right: TGISStroke): Boolean;
     Class Operator NotEqual(const Left,Right: TGISStroke): Boolean;
     // True when the stroke would not put down any pixels
@@ -52,8 +52,8 @@ Type
   public
     Color: TAlphaColor;
     Style: TGISBrushStyle;
-    Class Function Create(const Color: TAlphaColor;
-                          const Style: TGISBrushStyle = gbsSolid): TGISFill; static;
+    Constructor Create(const Color: TAlphaColor;
+                       const Style: TGISBrushStyle = gbsSolid);
     Class Operator Equal(const Left,Right: TGISFill): Boolean;
     Class Operator NotEqual(const Left,Right: TGISFill): Boolean;
     // True when the fill would not put down any pixels
@@ -67,10 +67,10 @@ Type
     Size: Single;
     Bold: Boolean;
     Color: TAlphaColor;
-    Class Function Create(const FontName: String;
-                          const Size: Single;
-                          const Color: TAlphaColor;
-                          const Bold: Boolean = false): TGISTextStyle; static;
+    Constructor Create(const FontName: String;
+                       const Size: Single;
+                       const Color: TAlphaColor;
+                       const Bold: Boolean = false);
     Class Operator Equal(const Left,Right: TGISTextStyle): Boolean;
     Class Operator NotEqual(const Left,Right: TGISTextStyle): Boolean;
   end;
@@ -141,13 +141,13 @@ Type
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-Class Function TGISStroke.Create(const Color: TAlphaColor;
-                                 const Width: Single = 1.0;
-                                 const Style: TGISPenStyle = gpsSolid): TGISStroke;
+Constructor TGISStroke.Create(const Color: TAlphaColor;
+                              const Width: Single = 1.0;
+                              const Style: TGISPenStyle = gpsSolid);
 begin
-  Result.Color := Color;
-  Result.Width := Width;
-  Result.Style := Style;
+  Self.Color := Color;
+  Self.Width := Width;
+  Self.Style := Style;
 end;
 
 Class Operator TGISStroke.Equal(const Left,Right: TGISStroke): Boolean;
@@ -169,11 +169,11 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Class Function TGISFill.Create(const Color: TAlphaColor;
-                               const Style: TGISBrushStyle = gbsSolid): TGISFill;
+Constructor TGISFill.Create(const Color: TAlphaColor;
+                            const Style: TGISBrushStyle = gbsSolid);
 begin
-  Result.Color := Color;
-  Result.Style := Style;
+  Self.Color := Color;
+  Self.Style := Style;
 end;
 
 Class Operator TGISFill.Equal(const Left,Right: TGISFill): Boolean;
@@ -193,15 +193,15 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Class Function TGISTextStyle.Create(const FontName: String;
-                                    const Size: Single;
-                                    const Color: TAlphaColor;
-                                    const Bold: Boolean = false): TGISTextStyle;
+Constructor TGISTextStyle.Create(const FontName: String;
+                                 const Size: Single;
+                                 const Color: TAlphaColor;
+                                 const Bold: Boolean = false);
 begin
-  Result.FontName := FontName;
-  Result.Size := Size;
-  Result.Color := Color;
-  Result.Bold := Bold;
+  Self.FontName := FontName;
+  Self.Size := Size;
+  Self.Color := Color;
+  Self.Bold := Bold;
 end;
 
 Class Operator TGISTextStyle.Equal(const Left,Right: TGISTextStyle): Boolean;

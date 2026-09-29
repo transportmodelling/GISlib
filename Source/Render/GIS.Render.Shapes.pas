@@ -40,7 +40,7 @@ Type
     Procedure SetPointImageBytes(const Bytes: TBytes);
     Function PointImage(const Canvas: IGISCanvas): IGISImage;
     Procedure LoadPointResource(const ResourceName: String);
-    Class Function PngWidth(const Bytes: TBytes): Integer; static;
+    Function PngWidth(const Bytes: TBytes): Integer;
   strict protected
     Type
       TShapeRenderer = Class
@@ -397,7 +397,7 @@ begin
   if FPointRenderStyle < rsBitmap then FPointRenderSize := PointRenderSize;
 end;
 
-Class Function TCustomShapesLayer.PngWidth(const Bytes: TBytes): Integer;
+Function TCustomShapesLayer.PngWidth(const Bytes: TBytes): Integer;
 // The width sits in the IHDR chunk, which a PNG always puts first: an 8-byte
 // signature, then the chunk length and type, then the width as a big-endian
 // 32-bit value. Read here so PointRenderSize is known without decoding.

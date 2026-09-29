@@ -60,9 +60,9 @@ Type
     Procedure BuildPath(const Path: TGPGraphicsPath;
                         const Outer: TArray<TPointF>;
                         const Holes: TArray<TArray<TPointF>>);
-    Class Function ToGPPoints(const Points: TArray<TPointF>): TArray<TGPPointF>; static;
-    Class Function ToGPColor(const Color: TAlphaColor): TGPColor; static;
-    Class Function DashStyleFor(const Style: TGISPenStyle): TDashStyle; static;
+    Function ToGPPoints(const Points: TArray<TPointF>): TArray<TGPPointF>;
+    Function ToGPColor(const Color: TAlphaColor): TGPColor;
+    Function DashStyleFor(const Style: TGISPenStyle): TDashStyle;
   public
     Constructor Create(const Graphics: TGPGraphics;
                        const Width,Height: Single;
@@ -197,7 +197,7 @@ begin
   FGraphics.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
 end;
 
-Class Function TGdiPlusCanvas.ToGPColor(const Color: TAlphaColor): TGPColor;
+Function TGdiPlusCanvas.ToGPColor(const Color: TAlphaColor): TGPColor;
 begin
   Result := MakeColor(TAlphaColorRec(Color).A,
                       TAlphaColorRec(Color).R,
@@ -205,7 +205,7 @@ begin
                       TAlphaColorRec(Color).B);
 end;
 
-Class Function TGdiPlusCanvas.DashStyleFor(const Style: TGISPenStyle): TDashStyle;
+Function TGdiPlusCanvas.DashStyleFor(const Style: TGISPenStyle): TDashStyle;
 begin
   case Style of
     gpsDash: Result := DashStyleDash;
@@ -215,7 +215,7 @@ begin
   end;
 end;
 
-Class Function TGdiPlusCanvas.ToGPPoints(const Points: TArray<TPointF>): TArray<TGPPointF>;
+Function TGdiPlusCanvas.ToGPPoints(const Points: TArray<TPointF>): TArray<TGPPointF>;
 begin
   SetLength(Result,Length(Points));
   for var Point := low(Points) to high(Points) do

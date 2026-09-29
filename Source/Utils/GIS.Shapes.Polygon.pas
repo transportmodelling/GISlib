@@ -20,10 +20,6 @@ Type
   TPolyPolygon = record
   // Single outer ring, (potentially) with holes
   private
-    Class Function Intersecting(const Point,A,B: TCoordinate): Boolean; static;
-    Class Function NrIntersections(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Integer; static;
-    Class Function PointInRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Boolean; static;
-  private
     FOuterRing: TShapePart;
     FHoles: array of TShapePart;
     Function GetHoles(Hole: Integer): TShapePart; inline;
@@ -77,106 +73,21 @@ begin
   Result := FHoles[Hole];
 end;
 
-Class Function TPolyPolygon.Intersecting(const Point,A,B: TCoordinate): Boolean;
-// Tests whether the line from Point to (infinity,Point.Y) and line segment AB intersect
-begin
-  if (A.Y > Point.Y) and (B.Y > Point.Y) then Result := false else // AB positioned above line
-  if (A.Y < Point.Y) and (B.Y < Point.Y) then Result := false else // AB positioned below line
-  if (A.X < Point.X) and (B.X < Point.X) then Result := false else // AB positioned to the left of line
-  if (A.X >= Point.X) and (B.X >= Point.X) then Result := true else
-  if (A.Y = Point.Y) and (B.Y = Point.Y) then Result := true else
-  if A.X < B.X then
-    if A.Y < B.Y then
-      Result := (Point.X-A.X)*(B.Y-A.Y) <= (Point.Y-A.Y)*(B.X-A.X)
-    else
-      Result := (Point.X-A.X)*(A.Y-B.Y) <= (A.Y-Point.Y)*(B.X-A.X)
-  else
-    if B.Y < A.Y then
-      Result := (Point.X-B.X)*(A.Y-B.Y) <= (Point.Y-B.Y)*(A.X-B.X)
-    else
-      Result := (Point.X-B.X)*(B.Y-A.Y) <= (B.Y-Point.Y)*(A.X-B.X);
-end;
-
-Class Function TPolyPolygon.NrIntersections(const [ref] Point: TCoordinate;
-                                            const [ref] Ring: TShapePart): Integer;
-// Returns the number of intersection between Ring and the line from Point to (infinity,Point.Y).
-Const
-  Below = -1;
-  Above = +1;
-var
-  CurrentPoint,PreviousPoint: TCoordinate;
-begin
-  Result := 0;
-  if Ring.Count > 0 then
-  begin
-    // Find a vertex that is either above or below Point
-    var First := 0;
-    var Position := 0;
-    repeat
-      if Ring[First].Y < Point.Y then Position := Below else
-      if Ring[First].Y > Point.Y then Position := Above else
-      Inc(First);
-    until (Position <> 0) or (First = Ring.Count);
-   // Test whether edges intersect the line from Point to Point(infinite,Point.Y)
-    if First < Ring.Count then
-    begin
-      var Previous := First;
-      PreviousPoint := Ring.Points[First];
-      for var Vertex := 1 to Ring.Count do
-      begin
-        var Current := (First+Vertex) mod Ring.Count;
-        CurrentPoint := Ring.Points[Current];
-        if CurrentPoint.Y = PreviousPoint.Y then
-        begin
-          if CurrentPoint.Y = Point.Y then
-          if CurrentPoint.X < PreviousPoint.X then
-          begin
-           if (CurrentPoint.X <= Point.X) and (PreviousPoint.X >= Point.X) then Exit(1)
-          end else
-          begin
-            if (PreviousPoint.X <= Point.X) and (CurrentPoint.X >= Point.X) then Exit(1)
-          end;
-        end else
-        begin
-          if (Position = Above) and (CurrentPoint.Y < Point.Y) then
-          begin
-            Position := Below;
-            if Intersecting(Point,PreviousPoint,CurrentPoint) then Inc(Result)
-          end else
-          if (Position = Below) and (CurrentPoint.Y > Point.Y) then
-          begin
-            Position := Above;
-            if Intersecting(Point,PreviousPoint,CurrentPoint) then Inc(Result)
-          end;
-        end;
-        Previous := Current;
-        PreviousPoint := CurrentPoint;
-      end;
-    end;
-  end;
-end;
-
-Class Function TPolyPolygon.PointInRing(const [ref] Point: TCoordinate;
-                                        const [ref] Ring: TShapePart): Boolean;
-begin
-  Result := ((NrIntersections(Point,Ring) mod 2) = 1);
-end;
-
 Function TPolyPolygon.DistanceToLineSegment(const [ref] Point,A,B: TCoordinate): Float64;
 begin
-  var SqrAB := TCoordinate.SqrDistance(A,B);
+  var SqrAB := A.SqrDistance(B);
   if SqrAB <> 0 then
   begin
     var u := ( (Point.X-A.X)*(B.X-A.X) + (Point.Y-A.Y)*(B.Y-A.Y) ) / SqrAB;
-    if u < 0 then Result := TCoordinate.Distance(A,Point) else
-    if u > 1 then Result := TCoordinate.Distance(B,Point) else
+    if u < 0 then Result := A.Distance(Point) else
+    if u > 1 then Result := B.Distance(Point) else
     begin
       var P := TCoordinate.Create( (1-u)*A.X+u*B.X ,(1-u)*A.Y+u*B.Y );
-      Result := TCoordinate.Distance(P,Point);
+      Result := P.Distance(Point);
     end
   end else
     // Points A and B coincide
-    Result := TCoordinate.Distance(A,Point);
+    Result := A.Distance(Point);
 end;
 
 Function TPolyPolygon.DistanceToRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Float64;
@@ -192,11 +103,11 @@ end;
 Function TPolyPolygon.PointLocation(const [ref] Point: TCoordinate; out Hole: Integer): TPointLocation;
 begin
   Hole := -1;
-  if PointInRing(Point,FOuterRing) then
+  if FOuterRing.Contains(Point) then
   begin
     Result := plInterior;
     for var Index := low(FHoles) to high(FHoles) do
-    if PointInRing(Point,FHoles[Index]) then
+    if FHoles[Index].Contains(Point) then
     begin
       Result := plHole;
       Hole := Index;
@@ -306,7 +217,7 @@ begin
               end;
             end;
             // Test whether test point in enclosing polygon
-            if TPolyPolygon.PointInRing(TestCoordinate,PolyPolygons.Parts[EnclosingPolygonIndex]) then
+            if PolyPolygons.Parts[EnclosingPolygonIndex].Contains(TestCoordinate) then
             begin
               EnclosingPolygonsCount[Polygon] := EnclosingPolygonsCount[PotentialEnclosingPolygon]+1;
               LastEnclosingPolygon[Polygon] := PotentialEnclosingPolygon;
@@ -354,7 +265,7 @@ begin
   Result := Infinity;
   for var Vertex := 0 to Polygon.Count-1 do
   begin
-    var SqrDistance := TCoordinate.SqrDistance(Point,Polygon[Vertex]);
+    var SqrDistance := Point.SqrDistance(Polygon[Vertex]);
     if SqrDistance < Result then Result := SqrDistance;
   end;
 end;

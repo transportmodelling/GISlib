@@ -29,7 +29,7 @@ Type
     Var
       StreamReader: TGeoJSONStreamReader;
       FeaturesParser: TJsonObjectArrayParser;
-    Class Function PropertyValue(const Value: TJsonValue): Variant; static;
+    Function PropertyValue(const Value: TJsonValue): Variant;
     Function  ReadPoint(const Point: TJsonValue): TCoordinate;
     Function  ReadMultiPoint(const MultiPoint: TJsonValue): TMultiPoint;
     Function  ReadMultiPoints(const MultiPoints: TJsonValue): TMultiPoints;
@@ -122,7 +122,7 @@ begin
   FeaturesParser := TJsonObjectArrayParser.Create(StreamReader);
 end;
 
-Class Function TGeoJSONReader.PropertyValue(const Value: TJsonValue): Variant;
+Function TGeoJSONReader.PropertyValue(const Value: TJsonValue): Variant;
 begin
   if Value is TJSONNumber then
   begin
