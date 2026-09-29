@@ -13,7 +13,7 @@ interface
 
 uses
   Classes, SysUtils, Math, Types, Variants, Actions, Winapi.Windows,
-  Winapi.Messages, Winapi.ShellAPI, Vcl.Graphics, Vcl.Controls, Vcl.Forms,
+  Winapi.Messages, Winapi.ShellAPI, Winapi.CommCtrl, Vcl.Graphics, Vcl.Controls, Vcl.Forms,
   Vcl.Dialogs, Vcl.ActnList, Vcl.StdActns, Vcl.ComCtrls, Vcl.StdCtrls, PngImage,
   Vcl.Samples.Spin,
   System.ImageList, Vcl.ImgList, Vcl.ExtCtrls, Vcl.ToolWin,
@@ -42,12 +42,12 @@ type
     Pan: TAction;
     ShowOSM: TAction;
     GISToolBar: TToolBar;
-    ToolButton9: TToolButton;
-    ToolButton10: TToolButton;
-    ToolButton11: TToolButton;
-    ToolButton12: TToolButton;
-    ToolButton13: TToolButton;
-    ToolButton14: TToolButton;
+    ZoomInToolButton: TToolButton;
+    ZoomOutToolButton: TToolButton;
+    PanToolButton: TToolButton;
+    ZoomAllToolButton: TToolButton;
+    OSMSeparator: TToolButton;
+    ShowOSMToolButton: TToolButton;
     LayerPanel: TPanel;
     LayerListBox: TListBox;
     CollapseBtn: TButton;
@@ -59,21 +59,25 @@ type
     RemoveLayer: TAction;
     LayerUp: TAction;
     LayerDown: TAction;
-    ToolButton2: TToolButton;
-    ToolButton3: TToolButton;
-    ToolButton4: TToolButton;
+    RemoveLayerToolButton: TToolButton;
+    LayerUpToolButton: TToolButton;
+    LayerDownToolButton: TToolButton;
     SaveImage: TAction;
-    ToolButton5: TToolButton;
-    ToolButton6: TToolButton;
-    ToolButton8: TToolButton;
+    SaveImageSeparator: TToolButton;
+    SaveImageToolButton: TToolButton;
+    AddLayerToolButton: TToolButton;
     SaveLayer: TAction;
     SaveLayers: TAction;
-    ToolButton1: TToolButton;
-    ToolButton7: TToolButton;
-    ToolButton15: TToolButton;
+    SaveLayerToolButton: TToolButton;
+    SaveLayersToolButton: TToolButton;
+    SaveLayersSeparator: TToolButton;
     BackgroundPanel: TPanel;
     BackgroundLabel: TLabel;
     BackgroundColorPanel: TPanel;
+    PreviousView: TAction;
+    NextView: TAction;
+    PreviousViewToolButton: TToolButton;
+    NextViewToolButton: TToolButton;
     procedure AddLayerAccept(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure ZoomInExecute(Sender: TObject);
@@ -102,6 +106,8 @@ type
     procedure SaveLayerExecute(Sender: TObject);
     procedure SaveLayersExecute(Sender: TObject);
     procedure BackgroundColorPanelClick(Sender: TObject);
+    procedure PreviousViewExecute(Sender: TObject);
+    procedure NextViewExecute(Sender: TObject);
   private
     Const
       crZoomIn  = 1;
@@ -152,6 +158,66 @@ Const
   // Wide enough for the layers toolbar to keep its buttons on one row. The
   // toolbar wraps silently when this is too small, hiding the last buttons.
   ExpandedLayerPanelWidth = 216;
+
+Function CreateDisabledImages(const Images: TImageList; const Owner: TComponent): TImageList;
+// A toolbar draws a disabled button's image from its DisabledImages. Without
+// them a themed toolbar draws the image desaturated, which leaves a black icon
+// black. These are the images grayed and faded, as disabled icons usually look.
+Const
+  Opacity = 0.38;
+var
+  Image,Mask: TBitmap;
+begin
+  Result := TImageList.Create(Owner);
+  Result.ColorDepth   := cd32Bit;
+  Result.DrawingStyle := Images.DrawingStyle;
+  Result.SetSize(Images.Width,Images.Height);
+  Image := TBitmap.Create;
+  Mask  := TBitmap.Create;
+  try
+    Image.PixelFormat := pf32bit;
+    Image.SetSize(Images.Width,Images.Height);
+    Mask.PixelFormat  := pf1bit;
+    Mask.SetSize(Images.Width,Images.Height);
+    for var Index := 0 to Images.Count-1 do
+    begin
+      // Draw onto transparent black, which gives the pixels premultiplied
+      // by their alpha
+      Image.AlphaFormat := afIgnored;
+      for var Y := 0 to Image.Height-1 do FillChar(Image.ScanLine[Y]^,4*Image.Width,0);
+      ImageList_DrawEx(Images.Handle,Index,Image.Canvas.Handle,0,0,0,0,
+                       CLR_NONE,CLR_NONE,ILD_TRANSPARENT);
+      // The mask is set where a pixel is fully transparent
+      Mask.Canvas.Brush.Color := clBlack;
+      Mask.Canvas.FillRect(Rect(0,0,Mask.Width,Mask.Height));
+      for var Y := 0 to Image.Height-1 do
+      begin
+        var Pixel := PRGBQuad(Image.ScanLine[Y]);
+        for var X := 0 to Image.Width-1 do
+        begin
+          if Pixel.rgbReserved = 0 then
+            Mask.Canvas.Pixels[X,Y] := clWhite
+          else
+          begin
+            // Unpremultiply, gray and fade
+            var Gray := Min(255,Round((0.299*Pixel.rgbRed+0.587*Pixel.rgbGreen+
+                                       0.114*Pixel.rgbBlue)*255/Pixel.rgbReserved));
+            Pixel.rgbRed      := Gray;
+            Pixel.rgbGreen    := Gray;
+            Pixel.rgbBlue     := Gray;
+            Pixel.rgbReserved := Round(Opacity*Pixel.rgbReserved);
+          end;
+          Inc(Pixel);
+        end;
+      end;
+      Image.AlphaFormat := afDefined;
+      Result.Add(Image,Mask);
+    end;
+  finally
+    Image.Free;
+    Mask.Free;
+  end;
+end;
 
 ////////////////////////////////////////////////////////////////////////////////
 // TMainForm helpers
@@ -272,6 +338,8 @@ Procedure TMainForm.MercatorConverterChanged(Sender: TObject);
 begin
   for var Layer in Layers do
     Layer.Converter.SyncFrom(MercatorConverter);
+  PreviousView.Enabled := MercatorConverter.PreviousAvail;
+  NextView.Enabled     := MercatorConverter.NextAvail;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -307,6 +375,8 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   TFDGUIxWaitCursor.Create(Self);  // required by FireDAC; owned by form
+  GISToolBar.DisabledImages    := CreateDisabledImages(ImageList,Self);
+  LayersToolBar.DisabledImages := GISToolBar.DisabledImages;
   DragAcceptFiles(Handle,true);
   Screen.Cursors[crZoomIn]  := LoadCursor(HInstance,'ZOOM_IN');
   Screen.Cursors[crZoomOut] := LoadCursor(HInstance,'ZOOM_OUT');
@@ -640,6 +710,28 @@ begin
   PaintBox.Invalidate;
 end;
 
+procedure TMainForm.PreviousViewExecute(Sender: TObject);
+begin
+  MouseDown := false;
+  if MercatorConverter.Previous then  // OnChange syncs the layers
+  begin
+    LayoutChanged   := true;
+    ViewportChanged := true;
+    PaintBox.Invalidate;
+  end;
+end;
+
+procedure TMainForm.NextViewExecute(Sender: TObject);
+begin
+  MouseDown := false;
+  if MercatorConverter.Next then  // OnChange syncs the layers
+  begin
+    LayoutChanged   := true;
+    ViewportChanged := true;
+    PaintBox.Invalidate;
+  end;
+end;
+
 procedure TMainForm.ShowOSMExecute(Sender: TObject);
 begin
   MouseDown := false;
@@ -752,11 +844,10 @@ begin
       begin
         if MercatorConverter.Initialized then
         begin
-          var OldW := MercatorConverter.PixelWidth;
-          var OldH := MercatorConverter.PixelHeight;
+          // Keeps the centre of the view and, not being a change of view,
+          // leaves the view history and OnChange alone
           MercatorConverter.Resize(NewW, NewH);
-          if (OldW > 0) and (OldH > 0) then
-            MercatorConverter.PanMap((NewW - OldW) / 2, (NewH - OldH) / 2);
+          MercatorConverterChanged(nil);
         end;
         ViewportChanged := true;
         LayoutChanged     := true;

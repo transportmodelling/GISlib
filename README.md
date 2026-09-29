@@ -91,6 +91,7 @@ The repository includes a demo application that exercises the full library:
   color and size
 - Map background color
 - Reorder, remove and save layers
+- Go back and forward through earlier map views
 - Export the current map view as a PNG or BMP image
 
 ---
