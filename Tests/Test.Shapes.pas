@@ -41,11 +41,31 @@ type
     [Test] procedure BothFiles_SameShapeCount;
   end;
 
+  // The properties' encoding: Provincies_dutch_grid.dbf holds UTF-8 without
+  // declaring it, with the province Frysl-a-circumflex-n as the bytes C3 A2
+  // for the a-circumflex. These read a copy of it with various .cpg files.
+  [TestFixture]
+  TESRIShapeFileEncodingTests = class
+  private
+    FDir: String;
+    // The name of that province read from the copy, with a .cpg holding
+    // Cpg, or none when Cpg is empty
+    Function ProvinceName(const Cpg: String): String;
+  public
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
+    [Test] Procedure NoCpg_DetectsUTF8;
+    [Test] Procedure CpgUTF8;
+    [Test] Procedure CpgCodePageNumber;
+    [Test] Procedure CpgISO8859;
+    [Test] Procedure CpgUnknownCodePage_DetectsUTF8;
+  end;
+
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-uses System.SysUtils;
+uses System.SysUtils, System.IOUtils;
 
 function TESRIShapeFileReaderTests.DataPath: String;
 begin
@@ -160,7 +180,72 @@ begin
   Assert.AreEqual(CountDG, CountWGS, 'Both files should contain the same number of provinces');
 end;
 
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TESRIShapeFileEncodingTests.Setup;
+begin
+  FDir := TPath.Combine(TPath.GetTempPath, 'GISlibEncoding' + TGUID.NewGuid.ToString);
+  TDirectory.CreateDirectory(FDir);
+end;
+
+Procedure TESRIShapeFileEncodingTests.TearDown;
+begin
+  TDirectory.Delete(FDir, true);
+end;
+
+Function TESRIShapeFileEncodingTests.ProvinceName(const Cpg: String): String;
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var Source := ExpandFileName(ExtractFilePath(ParamStr(0)) + '..\Data\Provincies_dutch_grid');
+  var Target := TPath.Combine(FDir, 'Provincies');
+  for var Ext in ['.shp', '.shx', '.dbf'] do TFile.Copy(Source + Ext, Target + Ext);
+  if Cpg <> '' then TFile.WriteAllText(Target + '.cpg', Cpg);
+  Result := '';
+  var Reader := TESRIShapeFileReader.Create(Target + '.shp');
+  try
+    while Reader.ReadShape(Shape, Props) do
+    begin
+      var Name := String(Props.ValueFromName['statnaam']);
+      if Name.StartsWith('Frysl') then Exit(Name);
+    end;
+  finally
+    Reader.Free;
+  end;
+  Assert.Fail('Province not found');
+end;
+
+Procedure TESRIShapeFileEncodingTests.NoCpg_DetectsUTF8;
+begin
+  Assert.AreEqual('Frysl'#$E2'n', ProvinceName(''));
+end;
+
+Procedure TESRIShapeFileEncodingTests.CpgUTF8;
+begin
+  Assert.AreEqual('Frysl'#$E2'n', ProvinceName('UTF-8'));
+end;
+
+Procedure TESRIShapeFileEncodingTests.CpgCodePageNumber;
+begin
+  // Declared as Windows-1252, so the UTF-8 bytes read as two characters
+  Assert.AreEqual('Frysl'#$C3#$A2'n', ProvinceName('ANSI 1252'));
+end;
+
+Procedure TESRIShapeFileEncodingTests.CpgISO8859;
+begin
+  // ISO 8859-1 has the same characters as Windows-1252 at C3 and A2
+  Assert.AreEqual('Frysl'#$C3#$A2'n', ProvinceName('ISO 8859-1'));
+end;
+
+Procedure TESRIShapeFileEncodingTests.CpgUnknownCodePage_DetectsUTF8;
+begin
+  // A code page the system does not have is left to the dbf reader
+  Assert.AreEqual('Frysl'#$E2'n', ProvinceName('99999'));
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TESRIShapeFileReaderTests);
+  TDUnitX.RegisterTestFixture(TESRIShapeFileEncodingTests);
 
 end.

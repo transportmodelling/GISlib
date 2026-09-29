@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes, SysUtils, Generics.Collections, DBF, GIS, GIS.Shapes;
+  Classes, SysUtils, IOUtils, Generics.Collections, DBF, GIS, GIS.Shapes;
 
 Type
   TESRIShapeFileReader = Class(TGISShapesReader)
@@ -20,9 +20,13 @@ Type
     ShapesStream: TBufferedFileStream;
     ShapesReader: TBinaryReader;
     DBFReader: TDBFReader;
+    DBFEncoding: TEncoding;
+    Function CpgEncoding(const FileName: String): TEncoding;
     Function ReadPoints: TArray<TCoordinate>;
     Function ReadParts: TMultiPoints;
   public
+    // The properties are read in the encoding a .cpg file next to the
+    // shapefile names; without one, the dbf reader works it out
     Constructor Create(const FileName: TFileName); overload; override;
     Constructor Create(FileName: string; ReadProperties: Boolean); overload;
     Function IndexOf(const PropertyName: String; const MustExist: Boolean = false): Integer;
@@ -124,7 +128,45 @@ begin
   if ReadProperties then
   begin
     FileName := ChangeFileExt(FileName,'.dbf');
-    if FileExists(FileName) then DBFReader := TDBFReader.Create(FileName);
+    if FileExists(FileName) then
+    begin
+      DBFEncoding := CpgEncoding(ChangeFileExt(FileName,'.cpg'));
+      DBFReader := TDBFReader.Create(FileName,DBFEncoding);
+    end;
+  end;
+end;
+
+Function TESRIShapeFileReader.CpgEncoding(const FileName: String): TEncoding;
+// The encoding a .cpg file names: UTF-8, ISO 8859-n, or a name ending in the
+// code page number ('1252', 'ANSI 1252', 'CP1252', 'Windows-1252'). nil when
+// there is no .cpg file, or it names no code page this system has. The
+// caller owns the result.
+begin
+  Result := nil;
+  if FileExists(FileName) then
+  begin
+    var Name := UpperCase(Trim(TFile.ReadAllText(FileName)));
+    var CodePage := 0;
+    if (Name = 'UTF-8') or (Name = 'UTF8') then CodePage := 65001 else
+    begin
+      var ISO := Pos('8859',Name);
+      if ISO > 0 then Name := Copy(Name,ISO+4,MaxInt);
+      var Digits := '';
+      for var Chr := Length(Name) downto 1 do
+      if CharInSet(Name[Chr],['0'..'9']) then Digits := Name[Chr] + Digits else Break;
+      if (Digits <> '') and TryStrToInt(Digits,CodePage) then
+      begin
+        if ISO > 0 then CodePage := 28590 + CodePage; // ISO 8859-n is code page 2859n
+      end else
+        CodePage := 0;
+    end;
+    if CodePage <> 0 then
+    try
+      Result := TEncoding.GetEncoding(CodePage);
+    except
+      // A code page this system does not have: leave it to the dbf reader
+      on EEncodingError do Result := nil;
+    end;
   end;
 end;
 
@@ -222,6 +264,7 @@ begin
   ShapesStream.Free;
   ShapesReader.Free;
   DBFReader.Free;
+  DBFEncoding.Free;  // after the reader that uses it
   inherited Destroy;
 end;
 

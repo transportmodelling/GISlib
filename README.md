@@ -13,7 +13,7 @@ GISlib can read and write vector data in three formats:
 
 | Format | Read | Write | Notes |
 |---|---|---|---|
-| ESRI Shapefile (`.shp`) | ✓ | ✓ | Points, lines and polygons |
+| ESRI Shapefile (`.shp`) | ✓ | ✓ | Points, lines and polygons; properties are read in the encoding a `.cpg` names, or detected without one |
 | GeoJSON (`.geojson`) | ✓ | ✓ | Points, lines and polygons |
 | GeoPackage (`.gpkg`) | ✓ | ✓ | Multiple layers per file; requires FireDAC with the SQLite driver |
 
