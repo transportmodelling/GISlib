@@ -45,10 +45,15 @@ type
     [Test] procedure Initialize_SetsInitializedFlag;
     // SyncFrom: two converters with different CRS show the same tile layout
     [Test] procedure SyncFrom_SameZoomLevelAndMapOrigin;
-    // Resize + pan: geographic centre stays fixed
+    // Resize: geographic centre stays fixed
     [Test] procedure Resize_PreservesGeographicCentre;
     // PanMap: centre shifts by the expected amount
     [Test] procedure PanMap_MovesGeographicCentre;
+    // History: previous and next views
+    [Test] procedure Previous_Next_RestoreViews;
+    [Test] procedure Resize_IsNotAddedToHistory;
+    [Test] procedure Previous_AfterResize_RestoresGeographicCentre;
+    [Test] procedure Change_AfterPrevious_ClearsNext;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,7 +166,6 @@ begin
 
   NewW := 1200; NewH := 900;
   FConvWGS84.Resize(NewW, NewH);
-  FConvWGS84.PanMap((NewW - OldW) / 2, (NewH - OldH) / 2);
 
   CentreAfter := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(NewW / 2, NewH / 2));
   Assert.AreEqual(CentreBefore.Longitude, CentreAfter.Longitude, 1e-6, 'Longitude after resize');
@@ -180,6 +184,66 @@ begin
   PointAfter  := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(500, 400));
   Assert.AreEqual(PointBefore.Longitude, PointAfter.Longitude, 1e-6, 'PanMap longitude');
   Assert.AreEqual(PointBefore.Latitude,  PointAfter.Latitude,  1e-6, 'PanMap latitude');
+end;
+
+procedure TWebMercatorPixelConverterTests.Previous_Next_RestoreViews;
+var
+  Initial, Panned: TGeodeticCoordinate;
+begin
+  FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
+  Assert.IsFalse(FConvWGS84.PreviousAvail, 'No previous view after Initialize');
+  Initial := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(500, 400));
+  FConvWGS84.PanMap(100, 0);
+  Panned := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(500, 400));
+
+  Assert.IsTrue(FConvWGS84.Previous, 'Previous');
+  var Centre := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(500, 400));
+  Assert.AreEqual(Initial.Longitude, Centre.Longitude, 1e-6, 'Longitude after Previous');
+  Assert.AreEqual(Initial.Latitude,  Centre.Latitude,  1e-6, 'Latitude after Previous');
+  Assert.IsFalse(FConvWGS84.PreviousAvail, 'Back at the first view');
+  Assert.IsTrue(FConvWGS84.NextAvail, 'Next view available');
+
+  Assert.IsTrue(FConvWGS84.Next, 'Next');
+  Centre := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(500, 400));
+  Assert.AreEqual(Panned.Longitude, Centre.Longitude, 1e-6, 'Longitude after Next');
+  Assert.AreEqual(Panned.Latitude,  Centre.Latitude,  1e-6, 'Latitude after Next');
+  Assert.IsFalse(FConvWGS84.NextAvail, 'Back at the last view');
+end;
+
+procedure TWebMercatorPixelConverterTests.Resize_IsNotAddedToHistory;
+begin
+  FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
+  FConvWGS84.PanMap(100, 0);
+  Assert.IsTrue(FConvWGS84.Previous, 'Previous');
+  FConvWGS84.Resize(1200, 900);
+  // A resize neither adds a view nor drops the view after the current one
+  Assert.IsFalse(FConvWGS84.PreviousAvail, 'Resize added no previous view');
+  Assert.IsTrue(FConvWGS84.NextAvail, 'Resize kept the next view');
+end;
+
+procedure TWebMercatorPixelConverterTests.Previous_AfterResize_RestoresGeographicCentre;
+var
+  Initial: TGeodeticCoordinate;
+begin
+  FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
+  Initial := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(500, 400));
+  FConvWGS84.PanMap(100, 50);
+  FConvWGS84.Resize(1200, 900);
+  Assert.IsTrue(FConvWGS84.Previous, 'Previous');
+  // The earlier view comes back centred in the resized window
+  var Centre := FConvWGS84.PixelToGeodeticCoord(TPointF.Create(600, 450));
+  Assert.AreEqual(Initial.Longitude, Centre.Longitude, 1e-6, 'Longitude after Previous');
+  Assert.AreEqual(Initial.Latitude,  Centre.Latitude,  1e-6, 'Latitude after Previous');
+end;
+
+procedure TWebMercatorPixelConverterTests.Change_AfterPrevious_ClearsNext;
+begin
+  FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
+  FConvWGS84.PanMap(100, 0);
+  Assert.IsTrue(FConvWGS84.Previous, 'Previous');
+  FConvWGS84.ZoomIn(TPointF.Create(500, 400));
+  Assert.IsFalse(FConvWGS84.NextAvail, 'A new view drops the views after the current one');
+  Assert.IsTrue(FConvWGS84.PreviousAvail, 'The view zoomed from is the previous view');
 end;
 
 initialization

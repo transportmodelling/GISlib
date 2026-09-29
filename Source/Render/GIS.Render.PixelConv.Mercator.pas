@@ -55,7 +55,9 @@ Type
     Function VertTilesCount: Integer;
     // Sync Mercator state from another converter (same view, different CoordinateConverter)
     Procedure SyncFrom(const Source: TWebMercatorPixelConverter);
-    // Update pixel dimensions without changing zoom/pan position
+    // Update pixel dimensions, keeping the zoom level and the centre of the
+    // view. The view itself is unchanged, so it is not added to the history
+    // and OnChange does not fire.
     Procedure Resize(const PixelWidth,PixelHeight: Float32);
     // Get viewport
     Function GetViewport: TCoordinateRect; override;
@@ -84,17 +86,21 @@ begin
 end;
 
 Procedure TWebMercatorPixelConverter.WriteState(const Writer: TBinaryWriter);
+// A state holds the centre of the view rather than its top left corner, so
+// that it restores the same view after the pixel dimensions have changed
 begin
+  var CenterX: Float64 := MercatorMapLeft+0.5*FPixelWidth;
+  var CenterY: Float64 := MercatorMapTop+0.5*FPixelHeight;
   Writer.Write(FZoomLevel);
-  Writer.Write(MercatorMapLeft);
-  Writer.Write(MercatorMapTop);
+  Writer.Write(CenterX);
+  Writer.Write(CenterY);
 end;
 
 Procedure TWebMercatorPixelConverter.ReadState(const Reader: TBinaryReader);
 begin
   SetZoomLevel(Reader.ReadByte);
-  MercatorMapLeft := Reader.ReadDouble;
-  MercatorMapTop := Reader.ReadDouble;
+  MercatorMapLeft := Reader.ReadDouble-0.5*FPixelWidth;
+  MercatorMapTop := Reader.ReadDouble-0.5*FPixelHeight;
 end;
 
 Procedure TWebMercatorPixelConverter.SetZoomLevel(ZoomLevel: Integer);
@@ -299,9 +305,10 @@ Procedure TWebMercatorPixelConverter.Resize(const PixelWidth,PixelHeight: Float3
 begin
   if FInitialized then
   begin
+    MercatorMapLeft := MercatorMapLeft-0.5*(PixelWidth-FPixelWidth);
+    MercatorMapTop  := MercatorMapTop-0.5*(PixelHeight-FPixelHeight);
     FPixelWidth  := PixelWidth;
     FPixelHeight := PixelHeight;
-    Changed;
   end;
 end;
 
