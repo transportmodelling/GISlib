@@ -13,13 +13,15 @@ interface
 
 uses
   SysUtils, Vcl.Controls, Vcl.Forms, Vcl.StdCtrls, Vcl.ExtCtrls, Vcl.Samples.Spin,
-  GIS.CoordConv, GIS.CoordConv.WGS84, GIS.CoordConv.DutchGrid, GIS.CoordConv.WebMercator,
+  GIS, GIS.CoordConv, GIS.CoordConv.WGS84, GIS.CoordConv.DutchGrid, GIS.CoordConv.WebMercator,
   GIS.CoordConv.UTM;
 
 type
   TGISCoordinateSystem = class
   public
     Function Name: String; virtual; abstract;
+    // The name as offered for selection when opening a file
+    Function Description: String; virtual;
     Function SRID: Integer; virtual; abstract;
     // Caller owns the returned converter
     Function CreateConverter: TCoordinateConverter; virtual; abstract;
@@ -32,6 +34,31 @@ type
     // (e.g. a GeoPackage layer's stored SRID). Systems with extra parameters
     // can use this as a starting point for Configure. No-op by default.
     Procedure HintSRID(const SRID: Integer); virtual;
+    // Whether the coordinates can be converted to geodetic coordinates. They
+    // can only be drawn as they are where they cannot.
+    Function Known: Boolean; virtual;
+  end;
+
+  // Passes coordinates on as they are. It stands in where a converter is
+  // required for coordinates of an unknown coordinate system.
+  TUnknownCoordinateConverter = class(TCoordinateConverter)
+  public
+    Function MetersPerUnit: Float64; override;
+    Function CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate; override;
+    Function GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate; override;
+    Function SRID: Integer; override;
+    Function SRSName: String; override;
+  end;
+
+  // For a file whose coordinate system is not known. Its layer is drawn in
+  // the Cartesian projection only.
+  TUnknownCoordinateSystem = class(TGISCoordinateSystem)
+  public
+    Function Name: String; override;
+    Function Description: String; override;
+    Function SRID: Integer; override;
+    Function CreateConverter: TCoordinateConverter; override;
+    Function Known: Boolean; override;
   end;
 
   TWgs84CoordinateSystem = class(TGISCoordinateSystem)
@@ -73,6 +100,11 @@ type
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
+Function TGISCoordinateSystem.Description: String;
+begin
+  Result := Name;
+end;
+
 Procedure TGISCoordinateSystem.Configure;
 begin
   // No parameters to configure by default
@@ -82,6 +114,69 @@ Procedure TGISCoordinateSystem.HintSRID(const SRID: Integer);
 begin
   // No CRS metadata to use by default
 end;
+
+Function TGISCoordinateSystem.Known: Boolean;
+begin
+  Result := true;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Function TUnknownCoordinateConverter.MetersPerUnit: Float64;
+begin
+  Result := 1;
+end;
+
+Function TUnknownCoordinateConverter.CoordToGeodeticCoord(Coord: TCoordinate): TGeodeticCoordinate;
+begin
+  Result.Longitude := Coord.X;
+  Result.Latitude  := Coord.Y;
+end;
+
+Function TUnknownCoordinateConverter.GeodeticCoordToCoord(GeodeticCoord: TGeodeticCoordinate): TCoordinate;
+begin
+  Result.X := GeodeticCoord.Longitude;
+  Result.Y := GeodeticCoord.Latitude;
+end;
+
+Function TUnknownCoordinateConverter.SRID: Integer;
+begin
+  Result := -1;  // the undefined Cartesian system of a GeoPackage
+end;
+
+Function TUnknownCoordinateConverter.SRSName: String;
+begin
+  Result := 'Undefined Cartesian SRS';
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Function TUnknownCoordinateSystem.Name: String;
+begin
+  Result := 'Unknown';
+end;
+
+Function TUnknownCoordinateSystem.Description: String;
+begin
+  Result := 'Unknown (Cartesian projection only)';
+end;
+
+Function TUnknownCoordinateSystem.SRID: Integer;
+begin
+  Result := -1;
+end;
+
+Function TUnknownCoordinateSystem.CreateConverter: TCoordinateConverter;
+begin
+  Result := TUnknownCoordinateConverter.Create;
+end;
+
+Function TUnknownCoordinateSystem.Known: Boolean;
+begin
+  Result := false;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
 
 Function TWgs84CoordinateSystem.Name: String;
 begin

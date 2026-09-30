@@ -29,7 +29,9 @@ type
 
   // mpCartesian draws the coordinates of the layers as they are, which fits a
   // view to the paint area exactly. It takes visible layers that share a
-  // coordinate system and shows no tiles.
+  // coordinate system and shows no tiles. A layer of an unknown coordinate
+  // system is taken to be in that of the others, and is hidden in any other
+  // projection.
   TMapProjection = (mpWebMercator,mpCartesian);
 
   TMainForm = class(TForm)
@@ -146,14 +148,19 @@ type
       DisplayCoordConverter: TCoordinateConverter;
       FileFormats:       TArray<TGISFileFormat>;
       CoordinateSystems: TArray<TGISCoordinateSystem>;
+      // Offered when opening a file, ahead of CoordinateSystems
+      UnknownCoordSystem: TGISCoordinateSystem;
     Function  CreateDisabledImages(const Images: TImageList): TImageList;
     Function  ActiveConverter: TCustomPixelConverter;
     Function  MapShown: Boolean;
+    Function  Georeferenced: Boolean;
     Function  PixelToGeodeticCoord(const Pixel: TPointF): TGeodeticCoordinate;
     Function  CommonCoordSystem(out CoordSystem: TGISCoordinateSystem): Boolean;
+    Function  UnknownLayerShown: Boolean;
     Function  WorldBBox: TCoordinateRect;
     Function  AllLayersBBox: TCoordinateRect;
     Function  CartesianLayersBBox: TCoordinateRect;
+    Procedure HideUnknownLayers;
     Procedure SetProjection(NewProjection: TMapProjection; const KeepView: Boolean = true);
     Procedure UpdateSelectedLayerPanel;
     Procedure UpdateMinHeight;
@@ -270,6 +277,13 @@ begin
     end;
 end;
 
+Function TMainForm.Georeferenced: Boolean;
+// Whether the coordinates of the view are of a known coordinate system, so
+// that they can be converted to another one
+begin
+  Result := (Projection = mpWebMercator) or CartesianCoordSystem.Known;
+end;
+
 Function TMainForm.PixelToGeodeticCoord(const Pixel: TPointF): TGeodeticCoordinate;
 begin
   if Projection = mpCartesian then
@@ -280,14 +294,23 @@ end;
 
 Function TMainForm.CommonCoordSystem(out CoordSystem: TGISCoordinateSystem): Boolean;
 // Whether the visible layers share a coordinate system, and that coordinate
-// system. It is nil where no layer is visible.
+// system. It is nil where no layer is visible. A layer of an unknown
+// coordinate system is taken to share that of the others, so the unknown one
+// is returned only where no other is visible.
 begin
   Result := true;
   CoordSystem := nil;
   for var Layer in Layers do
     if Layer.Visible then
-      if CoordSystem = nil then CoordSystem := Layer.CoordSystem else
-      if Layer.CoordSystem <> CoordSystem then Exit(false);
+      if (CoordSystem = nil) or not CoordSystem.Known then CoordSystem := Layer.CoordSystem else
+      if Layer.CoordSystem.Known and (Layer.CoordSystem <> CoordSystem) then Exit(false);
+end;
+
+Function TMainForm.UnknownLayerShown: Boolean;
+begin
+  Result := false;
+  for var Layer in Layers do
+    if Layer.Visible and not Layer.CoordSystem.Known then Exit(true);
 end;
 
 Function TMainForm.WorldBBox: TCoordinateRect;
@@ -339,9 +362,30 @@ begin
   end;
 end;
 
+Procedure TMainForm.HideUnknownLayers;
+begin
+  for var Layer in Layers do
+    if not Layer.CoordSystem.Known then Layer.Visible := false;
+  // Show it in the panel of the selected layer, without the control reporting
+  // the change back
+  var Selected := LayerListBox.ItemIndex;
+  if (Selected >= 0) and (Selected < Layers.Count) then
+  begin
+    var Ctrl := Layers[Selected].RenderingControl;
+    if Ctrl <> nil then
+    begin
+      Ctrl.OnChange := nil;
+      Ctrl.LoadFrom(Layers[Selected]);
+      Ctrl.OnChange := LayerPropertyChanged;
+    end;
+  end;
+  LayoutChanged := true;
+  PaintBox.Invalidate;
+end;
+
 Procedure TMainForm.SetProjection(NewProjection: TMapProjection; const KeepView: Boolean = true);
 // Puts the projection into effect and carries the view over to it. Without
-// KeepView the caller sets a view of its own. Passing the projection in
+// KeepView the view is zoomed to all layers instead. Passing the projection in
 // effect checks it against the visible layers.
 var
   CoordSystem: TGISCoordinateSystem;
@@ -349,20 +393,43 @@ var
   Viewport,Pixels: TCoordinateRect;
 begin
   // Cartesian draws the coordinates of the visible layers as they are, so
-  // these must share a coordinate system. It stays the one last drawn in for
-  // as long as no layer is visible.
-  var Refused := false;
-  CoordSystem := nil;
-  if NewProjection = mpCartesian then
-    if CommonCoordSystem(CoordSystem) then
+  // these must share a coordinate system. Web Mercator converts them, so it
+  // must know the coordinate system of each: asking for it hides the layers
+  // of an unknown one.
+  var Refused := '';
+  if (NewProjection = mpWebMercator) and (Projection = mpCartesian) then HideUnknownLayers;
+  var Common := CommonCoordSystem(CoordSystem);
+  // A layer of an unknown coordinate system was added or shown
+  if UnknownLayerShown then
+    if Common then
     begin
-      if CoordSystem = nil then CoordSystem := CartesianCoordSystem;
-      if CoordSystem = nil then CoordSystem := CoordinateSystems[0];
+      if NewProjection = mpWebMercator then
+        Refused := 'The Web Mercator projection needs the coordinate system of '+
+                   'every visible layer. The map is drawn in Cartesian.';
+      NewProjection := mpCartesian;
     end else
     begin
+      // Neither projection takes these layers together
+      HideUnknownLayers;
       NewProjection := mpWebMercator;
-      Refused := true;
+      Refused := 'A layer of an unknown coordinate system cannot be drawn '+
+                 'together with layers that differ in coordinate system. '+
+                 'It is hidden.';
+    end
+  else
+    if (NewProjection = mpCartesian) and not Common then
+    begin
+      NewProjection := mpWebMercator;
+      Refused := 'The Cartesian projection takes layers that share a coordinate '+
+                 'system. The map is drawn in Web Mercator.';
     end;
+  // The coordinate system stays the one last drawn in for as long as no layer
+  // is visible
+  if NewProjection = mpCartesian then
+  begin
+    if CoordSystem = nil then CoordSystem := CartesianCoordSystem;
+    if CoordSystem = nil then CoordSystem := CoordinateSystems[0];
+  end;
   ProjectionComboBox.ItemIndex := Ord(NewProjection);
   // Tiles are laid out in Web Mercator
   if (NewProjection = mpCartesian) and ShowOSM.Checked then
@@ -375,17 +442,24 @@ begin
   if (NewProjection <> Projection) or
      ((NewProjection = mpCartesian) and (CoordSystem <> CartesianCoordSystem)) then
   begin
-    // The corners of the view, taken before the projection changes
+    // A Cartesian view that gains or loses its coordinate system keeps its
+    // coordinates: layers of an unknown one are taken to be in that of the view
+    var SameCoords := (Projection = mpCartesian) and (NewProjection = mpCartesian) and
+                      not (CartesianCoordSystem.Known and CoordSystem.Known);
+    var CarryView := KeepView and ActiveConverter.Initialized and not SameCoords;
+    // The corners of the view, taken before the projection changes. There are
+    // none to carry over from or to an unknown coordinate system.
     var ViewWidth  := ActiveConverter.PixelWidth;
     var ViewHeight := ActiveConverter.PixelHeight;
-    if KeepView and ActiveConverter.Initialized then
+    if CarryView and Georeferenced and
+       ((NewProjection = mpWebMercator) or CoordSystem.Known) then
       Corners := [PixelToGeodeticCoord(TPointF.Create(0,0)),
                   PixelToGeodeticCoord(TPointF.Create(ViewWidth,0)),
                   PixelToGeodeticCoord(TPointF.Create(ViewWidth,ViewHeight)),
                   PixelToGeodeticCoord(TPointF.Create(0,ViewHeight))];
     Projection := NewProjection;
     // The view history holds views of a single projection
-    ActiveConverter.Clear;
+    if not SameCoords then ActiveConverter.Clear;
     if Projection = mpCartesian then
     begin
       CartesianCoordSystem := CoordSystem;
@@ -433,15 +507,18 @@ begin
           State.Free;
         end;
       end;
-    end;
+    end else
+      if CarryView then ZoomAllExecute(nil);
     ConverterChanged(nil);
     LayoutChanged   := true;
     ViewportChanged := true;
     PaintBox.Invalidate;
   end;
-  if Refused then
-    MessageDlg('The Cartesian projection takes layers that share a coordinate '+
-               'system. The map is drawn in Web Mercator.',mtInformation,[mbOK],0);
+  // The mouse coordinates are converted to the coordinate system selected
+  CoordSystemComboBox.Enabled := Georeferenced;
+  // Before the message: the map is painted while it shows
+  if not KeepView then ZoomAllExecute(nil);
+  if Refused <> '' then MessageDlg(Refused,mtInformation,[mbOK],0);
 end;
 
 Procedure TMainForm.CoordSystemComboBoxChange(Sender: TObject);
@@ -525,7 +602,6 @@ begin
   if LayerPanel.Width <= CollapseBtn.Width then
     CollapseBtnClick(nil);
   SetProjection(Projection,false);
-  ZoomAllExecute(nil);
 end;
 
 Procedure TMainForm.ConverterChanged(Sender: TObject);
@@ -585,6 +661,7 @@ begin
     TWebMercatorCoordinateSystem.Create,
     TUtmCoordinateSystem.Create
   ];
+  UnknownCoordSystem := TUnknownCoordinateSystem.Create;
   // Registered file formats - extend here to add more
   FileFormats := [
     TESRIFileFormat.Create,
@@ -650,6 +727,7 @@ begin
   Layers.Free;  // free layers before coord systems (layers hold CoordSystem refs)
   DisplayCoordConverter.Free;
   for var CS in CoordinateSystems do CS.Free;
+  UnknownCoordSystem.Free;
   for var FF in FileFormats do FF.Free;
 end;
 
@@ -948,19 +1026,14 @@ begin
 end;
 
 Procedure TMainForm.ZoomAllExecute(Sender: TObject);
-var
-  BBox: TCoordinateRect;
 begin
-  if Layers.Count > 0 then
-    BBox := AllLayersBBox
-  else
-    BBox := WorldBBox;
   if MercatorConverter <> nil then
   begin
+    // AllLayersBBox converts coordinates, which takes known coordinate systems
     if Projection = mpCartesian then
       CartesianConverter.Initialize(CartesianLayersBBox,PaintBox.ClientWidth,PaintBox.ClientHeight)
     else
-      MercatorConverter.Initialize(BBox,PaintBox.ClientWidth,PaintBox.ClientHeight);
+      MercatorConverter.Initialize(AllLayersBBox,PaintBox.ClientWidth,PaintBox.ClientHeight);
     LayoutChanged := true;
     if Layers.Count > 0 then ViewportChanged := true;
   end;
@@ -1056,8 +1129,11 @@ begin
      (X >= 0) and (X < PaintBox.ClientWidth) and
      (Y >= 0) and (Y < PaintBox.ClientHeight) then
   begin
-    var Geodetic := PixelToGeodeticCoord(TPointF.Create(MousePosition.X,MousePosition.Y));
-    MouseCoordinate := DisplayCoordConverter.GeodeticCoordToCoord(Geodetic);
+    var Pixel := TPointF.Create(MousePosition.X,MousePosition.Y);
+    if Georeferenced then
+      MouseCoordinate := DisplayCoordConverter.GeodeticCoordToCoord(PixelToGeodeticCoord(Pixel))
+    else
+      MouseCoordinate := CartesianConverter.PixelToCoord(Pixel);  // as they are
     XCoordPanel.Caption := MouseCoordinate.X.ToString(4,false,false);
     YCoordPanel.Caption := MouseCoordinate.Y.ToString(4,false,false);
   end else
@@ -1206,7 +1282,8 @@ begin
     for var FF in FileFormats do
       if FF.Handles(Ext) then
       begin
-        var NewLayers := FF.OpenFile(FileName, CoordinateSystems, MercatorConverter);
+        var NewLayers := FF.OpenFile(FileName, [UnknownCoordSystem] + CoordinateSystems,
+                                     MercatorConverter);
         for var L in NewLayers do
           AddGISLayer(L);
         Break;

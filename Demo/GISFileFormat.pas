@@ -21,7 +21,8 @@ uses
 type
   TGISFileFormat = class
   protected
-    // Presents a CRS selection dialog using the supplied systems.
+    // Presents a CRS selection dialog using the supplied systems. These may
+    // include an unknown one, for a file to be drawn without its CRS.
     // Returns nil if the user cancels.
     Function SelectCoordSystem(const ACoordSystems: TArray<TGISCoordinateSystem>): TGISCoordinateSystem;
   public
@@ -132,7 +133,7 @@ begin
     Combo.SetBounds(8, 30, 280, 22);
     Combo.Style := csDropDownList;
     for var CS in ACoordSystems do
-      Combo.Items.Add(CS.Name);
+      Combo.Items.Add(CS.Description);
     Combo.ItemIndex := 0;
     OKBtn := TButton.Create(Dialog);
     OKBtn.Parent      := Dialog;
@@ -368,7 +369,7 @@ begin
       CRSCombo.SetBounds(8, 74, 280, 22);
       CRSCombo.Style := csDropDownList;
       for var CS in ACoordSystems do
-        CRSCombo.Items.Add(CS.Name);
+        CRSCombo.Items.Add(CS.Description);
       CRSCombo.ItemIndex := 0;
       OKBtn := TButton.Create(Dialog);
       OKBtn.Parent      := Dialog;
