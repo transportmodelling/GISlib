@@ -100,7 +100,8 @@ type
 
   TGeopackageLayerWriter = class
   // Writes TGISShape objects to a single feature layer in a GeoPackage file.
-  // Create via TGeopackageWriter.CreateLayerWriter.
+  // Create via TGeopackageWriter.CreateLayerWriter. The shapes go into the file
+  // in one transaction, committed when the writer is freed.
   private
     Procedure WriteByte  (Stream: TStream; Value: Byte);
     Procedure WriteInt32LE(Stream: TStream; Value: Int32);
@@ -618,6 +619,8 @@ begin
   FQuery := TFDQuery.Create(nil);
   FQuery.Connection := FConnection;
   FQuery.SQL.Text := SQL;
+  // All shapes go in one transaction rather than one each, which is many times faster
+  FConnection.StartTransaction;
 end;
 
 Procedure TGeopackageLayerWriter.WritePointWKB(Stream: TStream; const Shape: TGISShape);
@@ -735,6 +738,7 @@ end;
 
 Destructor TGeopackageLayerWriter.Destroy;
 begin
+  if FConnection.InTransaction then FConnection.Commit;
   FQuery.Free;
   inherited Destroy;
 end;

@@ -37,6 +37,8 @@ type
     Function WrittenGeometry(const Shape: TGISShape): TBytes;
     Function Int32At(const Bytes: TBytes; const Position: Integer): Int32;
     Function DoubleAt(const Bytes: TBytes; const Position: Integer): Double;
+    // Writes Count points to a layer of the temp file
+    Procedure WritePoints(const Count: Integer);
   public
     // Reader tests
     [Test] Procedure LayerNames_ContainsExpectedLayer;
@@ -59,6 +61,7 @@ type
     [Test] Procedure Writer_TwoOuterRings_WritesMultiPolygon;
     [Test] Procedure Writer_HoleListedFirst_WritesOuterRingFirst;
     [Test] Procedure Writer_NamesNeedingQuotes_RoundTrip;
+    [Test] Procedure Writer_ManyShapes_AllReadBack;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -322,6 +325,33 @@ end;
 Function TGeopackageTests.DoubleAt(const Bytes: TBytes; const Position: Integer): Double;
 begin
   Move(Bytes[Position], Result, SizeOf(Result));
+end;
+
+Procedure TGeopackageTests.WritePoints(const Count: Integer);
+var
+  Shape: TGISShape;
+begin
+  DeleteTempFile;
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('points', 4326);
+      try
+        for var Point := 1 to Count do
+        begin
+          Shape.AssignPoint(Point, Point);
+          LW.WriteShape(Shape, nil);
+        end;
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
 end;
 
 Procedure TGeopackageTests.Writer_CreatesFile;
@@ -705,6 +735,29 @@ begin
       Assert.IsTrue(Reader.ReadShape(Read, Props), 'A shape is read');
       Assert.AreEqual('Main Street', String(Props.ValueFromName['road name']));
       Assert.AreEqual('3', String(Props.ValueFromName['order']));
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  DeleteTempFile;
+end;
+
+Procedure TGeopackageTests.Writer_ManyShapes_AllReadBack;
+// The shapes of a layer go in one transaction, which freeing the layer writer commits
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  WritePoints(5000);
+  var Pkg := TGeopackage.Create(TempFile);
+  try
+    var Reader := Pkg.CreateReader('points');
+    try
+      var Count := 0;
+      while Reader.ReadShape(Shape, Props) do Inc(Count);
+      Assert.AreEqual(5000, Count);
     finally
       Reader.Free;
     end;
