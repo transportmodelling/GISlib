@@ -22,6 +22,13 @@ uses
   GIS.Render.Shapes, GIS.Render.PixelConv.Cartesian;
 
 type
+  TCountingSvgCanvas = class(TSvgCanvas, IGISCanvas)
+  // Counts the images it decodes
+  public
+    Decodes: Integer;
+    Function CreateImage(const Bytes: TBytes): IGISImage;
+  end;
+
   TLabeledShapesLayer = class(TShapesLayer)
   // Labels every shape, so that drawing the layer positions a label
   strict protected
@@ -48,6 +55,7 @@ type
     [Test] Procedure Clear_LeavesNoShapes;
     [Test] Procedure Clear_FreesTheRenderers;
     [Test] Procedure Read_SkipsFeaturesWithoutGeometry;
+    [Test] Procedure DrawLayer_OnAnotherCanvasOfTheSameKind_DecodesThePointSymbolOnce;
     [Test] Procedure SaveLabelPositions_WritesOnePositionPerOuterRing;
     [Test] Procedure SaveLabelPositions_AfterDrawing_WritesTheSamePositions;
     [Test] Procedure ReadLabelPositions_RoundTrips;
@@ -55,6 +63,14 @@ type
 
 ////////////////////////////////////////////////////////////////////////////////
 implementation
+////////////////////////////////////////////////////////////////////////////////
+
+Function TCountingSvgCanvas.CreateImage(const Bytes: TBytes): IGISImage;
+begin
+  Inc(Decodes);
+  Result := inherited CreateImage(Bytes);
+end;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Function TLabeledShapesLayer.ShapeLabel(const Shape: Integer): String;
@@ -199,6 +215,33 @@ begin
   finally
     Layer.Free;
     TFile.Delete(FileName);
+  end;
+end;
+
+Procedure TShapesLayerTests.DrawLayer_OnAnotherCanvasOfTheSameKind_DecodesThePointSymbolOnce;
+// An application wraps a new canvas around its bitmap for every paint; a symbol decoded
+// for one canvas serves any other of the same kind
+var
+  Shape: TGISShape;
+begin
+  var Layer := TShapesLayer.Create;
+  var Converter := TCartesianPixelConverter.Create;
+  try
+    Shape.AssignPoint(1,1);
+    Layer.Add(Shape);
+    Layer.PointRenderStyle := rsStation_24dp;
+    Converter.Initialize(Layer.BoundingBox,100,100);
+    var First := TCountingSvgCanvas.Create(100,100);
+    var FirstCanvas: IGISCanvas := First;
+    var Second := TCountingSvgCanvas.Create(100,100);
+    var SecondCanvas: IGISCanvas := Second;
+    Layer.DrawLayer(FirstCanvas,Converter);
+    Layer.DrawLayer(SecondCanvas,Converter);
+    Assert.AreEqual(1,First.Decodes,'Decoded for the first canvas');
+    Assert.AreEqual(0,Second.Decodes,'Not decoded again for the second');
+  finally
+    Converter.Free;
+    Layer.Free;
   end;
 end;
 

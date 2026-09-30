@@ -30,7 +30,7 @@ Type
     FPointRenderStyle: TPointRenderStyle;
     FPointImageBytes: TBytes;   // encoded symbol, empty unless a bitmap style is set
     FPointImage: IGISImage;     // decoded lazily, see PointImage
-    FPointImageOwner: Pointer;  // canvas that decoded FPointImage
+    FPointImageOwner: Pointer;  // the kind of canvas that decoded FPointImage
     FStyle: TGISShapeStyle;
     Viewport: TCoordinateRect;
     Function GetBoundingBoxes(Shape: Integer): TCoordinateRect;
@@ -437,12 +437,14 @@ end;
 Function TCustomShapesLayer.PointImage(const Canvas: IGISCanvas): IGISImage;
 begin
   if Length(FPointImageBytes) = 0 then Exit(nil);
-  // Decoding belongs to the canvas, so the image is rebuilt when a different
-  // canvas (a different back end) asks for it.
-  if (FPointImage = nil) or (FPointImageOwner <> Pointer(Canvas)) then
+  // Decoding belongs to the canvas, so the image is rebuilt when a different back end asks
+  // for it. Any canvas of the same kind can draw it, and an application wraps a new one
+  // around its bitmap for every paint, so the kind is what is remembered.
+  var CanvasKind := Pointer((Canvas as TObject).ClassType);
+  if (FPointImage = nil) or (FPointImageOwner <> CanvasKind) then
   begin
     FPointImage := Canvas.CreateImage(FPointImageBytes);
-    FPointImageOwner := Pointer(Canvas);
+    FPointImageOwner := CanvasKind;
   end;
   Result := FPointImage;
 end;

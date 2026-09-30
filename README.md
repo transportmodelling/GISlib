@@ -83,6 +83,8 @@ only decides whether a label fits, as the viewer does the horizontal alignment.
 - Tile cache holds up to 256 tiles in memory, as the encoded bytes they arrived
   as; the canvas decodes them, so no image codec is needed in the layer
 - `DrawLayer` takes an `IGISCanvas`, like the vector layers
+- Requests carry a User-Agent naming GISlib; set `UserAgent` to name your application
+  instead, as OpenStreetMap's tile usage policy asks
 
 ### Projection
 

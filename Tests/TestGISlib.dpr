@@ -38,6 +38,7 @@ uses
   Test.PolyLabel  in 'Test.PolyLabel.pas',
   Test.Render.Shapes in 'Test.Render.Shapes.pas',
   Test.Render.Network in 'Test.Render.Network.pas',
+  Test.Render.Tiles in 'Test.Render.Tiles.pas',
   Test.Polygon    in 'Test.Polygon.pas';
 
 begin

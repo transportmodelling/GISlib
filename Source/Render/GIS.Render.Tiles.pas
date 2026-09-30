@@ -31,7 +31,7 @@ Type
             Xindex,Yindex: Integer;
             Bytes: TBytes;
             Image: IGISImage;    // decoded on demand, see TCustomTilesLayer.TileImage
-            ImageOwner: Pointer; // canvas that decoded Image
+            ImageOwner: Pointer; // the kind of canvas that decoded Image
             Previous,Next: TCachedTile;
           end;
         Const
@@ -51,6 +51,7 @@ Type
     Var
       HTTP: THTTPClient;
       TilesCache: array[1..MaxZoomLevel] of TTilesCache;
+      FUserAgent: String;
     Function TileImage(const CachedTile: TTilesCache.TCachedTile;
                        const Canvas: IGISCanvas): IGISImage;
   strict protected
@@ -62,6 +63,10 @@ Type
     Constructor Create;
     Procedure DrawLayer(const Canvas: IGISCanvas; const PixelConverter: TWebMercatorPixelConverter);
     Destructor Destroy; override;
+  public
+    // What the requests say they come from. OpenStreetMap's tile usage policy asks for one
+    // naming the application, so an application should set its own
+    Property UserAgent: String read FUserAgent write FUserAgent;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,6 +145,7 @@ Constructor TCustomTilesLayer.Create;
 begin
   inherited Create;
   for var ZoomLevel := 1 to MaxZoomLevel do TilesCache[ZoomLevel] := TTilesCache.Create;
+  FUserAgent := 'GISlib (https://github.com/transportmodelling/GISlib)';
 end;
 
 Function TCustomTilesLayer.DownloadTile(const URL: String): TBytes;
@@ -147,7 +153,11 @@ begin
   var Stream := TBytesStream.Create;
   try
     if HTTP = nil then HTTP := THTTPClient.Create;
-    HTTP.Get(URL,Stream);
+    HTTP.UserAgent := FUserAgent;
+    var Response := HTTP.Get(URL,Stream);
+    // A tile server answers a request it declines with a page, not a tile
+    if Response.StatusCode <> 200 then
+    raise Exception.CreateFmt('Tile download failed: %d %s (%s)',[Response.StatusCode,Response.StatusText,URL]);
     Result := Copy(Stream.Bytes,0,Stream.Size);
   finally
     Stream.Free;
@@ -157,12 +167,14 @@ end;
 Function TCustomTilesLayer.TileImage(const CachedTile: TTilesCache.TCachedTile;
                                      const Canvas: IGISCanvas): IGISImage;
 begin
-  // Decoding belongs to the canvas, so a tile decoded for one back end is
-  // rebuilt when a different one asks for it.
-  if (CachedTile.Image = nil) or (CachedTile.ImageOwner <> Pointer(Canvas)) then
+  // Decoding belongs to the canvas, so a tile decoded for one back end is rebuilt when a
+  // different one asks for it. Any canvas of the same kind can draw it, and an application
+  // wraps a new one around its bitmap for every paint, so the kind is what is remembered.
+  var CanvasKind := Pointer((Canvas as TObject).ClassType);
+  if (CachedTile.Image = nil) or (CachedTile.ImageOwner <> CanvasKind) then
   begin
     CachedTile.Image := Canvas.CreateImage(CachedTile.Bytes);
-    CachedTile.ImageOwner := Pointer(Canvas);
+    CachedTile.ImageOwner := CanvasKind;
   end;
   Result := CachedTile.Image;
 end;
