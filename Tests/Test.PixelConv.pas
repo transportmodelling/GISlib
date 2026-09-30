@@ -22,6 +22,8 @@ type
   TCartesianPixelConverterTests = class
   private
     FConv: TCartesianPixelConverter;
+    FChanges: Integer;
+    Procedure CountChange(Sender: TObject);
   public
     [Setup]    Procedure Setup;
     [TearDown] Procedure TearDown;
@@ -35,6 +37,9 @@ type
     [Test] Procedure Initialize_SinglePoint_CentresOnThePoint;
     [Test] Procedure Initialize_HorizontalLine_FitsTheLine;
     [Test] Procedure Initialize_EmptyBoundingBox_Raises;
+    [Test] Procedure OnChange_Assigned_FiresAtOnce;
+    [Test] Procedure OnChange_FiresOnEveryChange;
+    [Test] Procedure OnChange_Nil_IsAccepted;
     // Resize: centre and scale stay fixed
     [Test] Procedure Resize_PreservesCentreAndScale;
     [Test] Procedure Resize_IsNotAddedToHistory;
@@ -73,6 +78,11 @@ implementation
 uses System.SysUtils, System.Math;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+Procedure TCartesianPixelConverterTests.CountChange(Sender: TObject);
+begin
+  Inc(FChanges);
+end;
 
 Procedure TCartesianPixelConverterTests.Setup;
 begin
@@ -183,6 +193,35 @@ begin
   BB.Clear;
   Assert.WillRaise(Procedure begin FConv.Initialize(BB, 800, 600) end, Exception);
   Assert.IsFalse(FConv.Initialized, 'Not initialized');
+end;
+
+Procedure TCartesianPixelConverterTests.OnChange_Assigned_FiresAtOnce;
+// So that whatever shows the view is brought up to date on being connected
+begin
+  FChanges := 0;
+  FConv.OnChange := CountChange;
+  Assert.AreEqual(1, FChanges);
+end;
+
+Procedure TCartesianPixelConverterTests.OnChange_FiresOnEveryChange;
+var
+  BB: TCoordinateRect;
+begin
+  FChanges := 0;
+  FConv.OnChange := CountChange;
+  BB.Left := 0; BB.Right := 10; BB.Bottom := 0; BB.Top := 10;
+  FConv.Initialize(BB, 100, 100);
+  FConv.ZoomIn(TPointF.Create(50, 50));
+  FConv.PanMap(5, 5);
+  Assert.AreEqual(4, FChanges);
+end;
+
+Procedure TCartesianPixelConverterTests.OnChange_Nil_IsAccepted;
+// Disconnecting must not call the handler that is no longer there
+begin
+  FConv.OnChange := CountChange;
+  FConv.OnChange := nil;
+  Assert.IsFalse(Assigned(FConv.OnChange));
 end;
 
 Procedure TCartesianPixelConverterTests.Resize_PreservesCentreAndScale;

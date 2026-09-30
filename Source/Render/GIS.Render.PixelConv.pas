@@ -97,9 +97,10 @@ begin
 end;
 
 Procedure TCustomPixelConverter.SetOnChange(OnChange: TNotifyEvent);
+// The handler is called at once, so that whatever shows the view is brought up to date
 begin
   FOnChange := OnChange;
-  FOnChange(Self);
+  if Assigned(FOnChange) then FOnChange(Self);
 end;
 
 Procedure TCustomPixelConverter.Changed;
