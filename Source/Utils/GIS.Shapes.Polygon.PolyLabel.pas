@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  GIS,GIS.Shapes.Polygon;
+  Types,GIS,GIS.Shapes.Polygon;
 
 Type
   TPolyLabel = record
@@ -36,13 +36,38 @@ Type
       Center: TCoordinate;
       Location: TPointLocation;
       Next: TPolyLabelCell;
+    Constructor Create(const Center: TCoordinate; const Size: Float64);
     Procedure SetDistance(const [ref] PolyPolygon: TPolyPolygon);
     Function SetPotential: Float64;
-    Function NorthEast: TPolyLabelCell;
-    Function NorthWest: TPolyLabelCell;
-    Function SouthEast: TPolyLabelCell;
-    Function SouthWest: TPolyLabelCell;
+    // One of the four cells of half the size this cell divides into, the
+    // signs telling which quadrant
+    Function SubCell(const SignX,SignY: Integer): TPolyLabelCell;
   end;
+
+  TPolyLabelSearch = Class
+  // The cells still to be subdivided, and the best label position found so far
+  private
+    First,Last: TPolyLabelCell;
+    Best: Float64;
+    BestCenter: TCoordinate;
+    // A cell goes to the front of the list when it promises more than the
+    // cell there, and to the back otherwise
+    Procedure Push(const Cell: TPolyLabelCell);
+    Function Pop: TPolyLabelCell;
+    // Keeps a subcell that could still improve on the best position; frees
+    // one that cannot
+    Procedure Consider(const SubCell: TPolyLabelCell; const [ref] PolyPolygon: TPolyPolygon);
+    Destructor Destroy; override;
+  end;
+
+////////////////////////////////////////////////////////////////////////////////
+
+Constructor TPolyLabelCell.Create(const Center: TCoordinate; const Size: Float64);
+begin
+  inherited Create;
+  Self.Center := Center;
+  Self.Size := Size;
+end;
 
 Procedure TPolyLabelCell.SetDistance(const [ref] PolyPolygon: TPolyPolygon);
 begin
@@ -58,185 +83,92 @@ begin
   Result := Potential;
 end;
 
-Function TPolyLabelCell.NorthEast: TPolyLabelCell;
+Function TPolyLabelCell.SubCell(const SignX,SignY: Integer): TPolyLabelCell;
 begin
   var Delta := Size/4;
-  Result := TPolyLabelCell.Create;
-  Result.Size := Size/2;
-  Result.Center.X := Center.X + Delta;
-  Result.Center.Y := Center.Y + Delta;
+  Result := TPolyLabelCell.Create(TCoordinate.Create(Center.X+SignX*Delta,Center.Y+SignY*Delta),Size/2);
 end;
 
-Function TPolyLabelCell.NorthWest: TPolyLabelCell;
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TPolyLabelSearch.Push(const Cell: TPolyLabelCell);
 begin
-  var Delta := Size/4;
-  Result := TPolyLabelCell.Create;
-  Result.Size := Size/2;
-  Result.Center.X := Center.X - Delta;
-  Result.Center.Y := Center.Y + Delta;
+  if First = nil then
+  begin
+    First := Cell;
+    Last := Cell;
+  end else
+  if Cell.Potential > First.Potential then
+  begin
+    Cell.Next := First;
+    First := Cell;
+  end else
+  begin
+    Last.Next := Cell;
+    Last := Cell;
+  end;
 end;
 
-Function TPolyLabelCell.SouthEast: TPolyLabelCell;
+Function TPolyLabelSearch.Pop: TPolyLabelCell;
 begin
-  var Delta := Size/4;
-  Result := TPolyLabelCell.Create;
-  Result.Size := Size/2;
-  Result.Center.X := Center.X + Delta;
-  Result.Center.Y := Center.Y - Delta;
+  Result := First;
+  First := Result.Next;
+  if First = nil then Last := nil;
+  Result.Next := nil;
 end;
 
-Function TPolyLabelCell.SouthWest: TPolyLabelCell;
+Procedure TPolyLabelSearch.Consider(const SubCell: TPolyLabelCell; const [ref] PolyPolygon: TPolyPolygon);
 begin
-  var Delta := Size/4;
-  Result := TPolyLabelCell.Create;
-  Result.Size := Size/2;
-  Result.Center.X := Center.X - Delta;
-  Result.Center.Y := Center.Y - Delta;
+  SubCell.SetDistance(PolyPolygon);
+  if SubCell.SetPotential > Best then
+  begin
+    // Update best
+    if (SubCell.Dist > Best) and (SubCell.Location = plInterior) then
+    begin
+      Best := SubCell.Dist;
+      BestCenter := SubCell.Center;
+    end;
+    Push(SubCell);
+  end else
+    SubCell.Free;
+end;
+
+Destructor TPolyLabelSearch.Destroy;
+begin
+  while First <> nil do Pop.Free;
+  inherited Destroy;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 Class Function TPolyLabel.PolyLabel(const [ref] PolyPolygon: TPolyPolygon; const MaxIter: Integer): TCoordinate;
-Var
-  First,Last: TPolyLabelCell;
+Const
+  Quadrants: array[0..3] of TPoint = ((X:+1;Y:+1),(X:-1;Y:+1),(X:+1;Y:-1),(X:-1;Y:-1));
 begin
-  // Initialize list with bounding box cell
-  var Cell := TPolyLabelCell.Create;
-  var BoundingBox := PolyPolygon.OuterRing.BoundingBox;
-  Cell.Center := BoundingBox.CenterPoint;
-  if BoundingBox.Width > BoundingBox.Height then
-    Cell.Size := BoundingBox.Width
-  else
-    Cell.Size := BoundingBox.Height;
-  // Initialize best
-  var Best := 0.0;
-  Result := Cell.Center;
-  // Iteratively improve solution
-  First := Cell;
-  Last := Cell;
-  var Iter := 0;
-  repeat
-    Inc(Iter);
-    Cell := First;
-    First := Cell.Next;
-    // Subdivide first cell into four smaller cells ...
-    // NorthEast subcell
-    var SubCell := Cell.NorthEast;
-    SubCell.SetDistance(PolyPolygon);
-    if SubCell.SetPotential > Best then
-    begin
-      // Update best
-      if (SubCell.Dist > Best) and (SubCell.Location = plInterior) then
-      begin
-        Best := SubCell.Dist;
-        Result := SubCell.Center;
+  var Search := TPolyLabelSearch.Create;
+  try
+    // Start with the bounding box cell
+    var BoundingBox := PolyPolygon.OuterRing.BoundingBox;
+    var Size := BoundingBox.Width;
+    if BoundingBox.Height > Size then Size := BoundingBox.Height;
+    Search.BestCenter := BoundingBox.CenterPoint;
+    Search.Push(TPolyLabelCell.Create(BoundingBox.CenterPoint,Size));
+    // Iteratively improve solution
+    var Iter := 0;
+    repeat
+      Inc(Iter);
+      // Subdivide first cell into four smaller cells
+      var Cell := Search.Pop;
+      try
+        for var Quadrant := low(Quadrants) to high(Quadrants) do
+        Search.Consider(Cell.SubCell(Quadrants[Quadrant].X,Quadrants[Quadrant].Y),PolyPolygon);
+      finally
+        Cell.Free;
       end;
-      // Add subcell to list
-      if First = nil then
-      begin
-        First := Subcell;
-        Last := SubCell
-      end else
-      if SubCell.Potential > First.Potential then
-      begin
-        SubCell.Next := First;
-        First := SubCell;
-      end else
-      begin
-        Last.Next := SubCell;
-        Last := SubCell;
-      end;
-    end;
-    // NorthWest subcell
-    SubCell := Cell.NorthWest;
-    SubCell.SetDistance(PolyPolygon);
-    if SubCell.SetPotential > Best then
-    begin
-      // Update best
-      if (SubCell.Dist > Best) and (SubCell.Location = plInterior) then
-      begin
-        Best := SubCell.Dist;
-        Result := SubCell.Center;
-      end;
-      // Add subcell to list
-      if First = nil then
-      begin
-        First := Subcell;
-        Last := SubCell
-      end else
-      if SubCell.Potential > First.Potential then
-      begin
-        SubCell.Next := First;
-        First := SubCell;
-      end else
-      begin
-        Last.Next := SubCell;
-        Last := SubCell;
-      end;
-    end;
-    // SouthEast subcell
-    SubCell := Cell.SouthEast;
-    SubCell.SetDistance(PolyPolygon);
-    if SubCell.SetPotential > Best then
-    begin
-      // Update best
-      if (SubCell.Dist > Best) and (SubCell.Location = plInterior) then
-      begin
-        Best := SubCell.Dist;
-        Result := SubCell.Center;
-      end;
-      // Add subcell to list
-      if First = nil then
-      begin
-        First := Subcell;
-        Last := SubCell
-      end else
-      if SubCell.Potential > First.Potential then
-      begin
-        SubCell.Next := First;
-        First := SubCell;
-      end else
-      begin
-        Last.Next := SubCell;
-        Last := SubCell;
-      end;
-    end;
-    // SouthWest subcell
-    SubCell := Cell.SouthWest;
-    SubCell.SetDistance(PolyPolygon);
-    if SubCell.SetPotential > Best then
-    begin
-      // Update best
-      if (SubCell.Dist > Best) and (SubCell.Location = plInterior) then
-      begin
-        Best := SubCell.Dist;
-        Result := SubCell.Center;
-      end;
-      // Add subcell to list
-      if First = nil then
-      begin
-        First := Subcell;
-        Last := SubCell
-      end else
-      if SubCell.Potential > First.Potential then
-      begin
-        SubCell.Next := First;
-        First := SubCell;
-      end else
-      begin
-        Last.Next := SubCell;
-        Last := SubCell;
-      end;
-    end;
-    // Remove cell
-    Cell.Free;
-  until (First=nil) or (First.Next = nil) or (Iter>=MaxIter);
-  // Clear list
-  while First <> nil do
-  begin
-    Cell := First;
-    First := Cell.Next;
-    Cell.Free;
+    until (Search.First = nil) or (Search.First.Next = nil) or (Iter >= MaxIter);
+    Result := Search.BestCenter;
+  finally
+    Search.Free;
   end;
 end;
 
