@@ -34,6 +34,7 @@ uses
   // Render tests need Vcl.Graphics and GDI+, so they build only where VCL exists
   Test.Render     in 'Test.Render.pas',
   {$ENDIF}
+  Test.Render.SVG in 'Test.Render.SVG.pas',
   Test.Polygon    in 'Test.Polygon.pas';
 
 begin

@@ -6,8 +6,8 @@ unit GIS.Render.Canvas;
 // https://github.com/transportmodelling/GISlib
 //
 // The drawing surface abstraction the render layer targets. Framework adapters
-// (GIS.Render.Canvas.VCL, and later FMX or SVG) implement IGISCanvas, so the
-// layer code itself stays RTL-only.
+// (GIS.Render.Canvas.VCL and GIS.Render.Canvas.SVG, and later FMX) implement
+// IGISCanvas, so the layer code itself stays RTL-only.
 //
 // Styles are passed per call rather than held as canvas state: an adapter is
 // free to cache the framework objects it builds from them, and a layer can

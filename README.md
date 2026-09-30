@@ -47,8 +47,23 @@ Rendering targets `IGISCanvas` (`GIS.Render.Canvas`), a small drawing-surface
 interface, so the layer code itself stays free of any UI framework. Framework
 adapters implement the interface: `GIS.Render.Canvas.VCL` draws through GDI+.
 Wrap a VCL surface with `GISCanvas(MyBitmap)` or `GISCanvas(MyCanvas, Width, Height)`
-and hand the result to `DrawLayer`. An FMX or SVG back end can be added as another
+and hand the result to `DrawLayer`. An FMX back end can be added as another
 implementation without touching the layers.
+
+`GIS.Render.Canvas.SVG` records what is drawn as an SVG document, and is RTL-only:
+
+```pascal
+var Svg := TSvgCanvas.Create(Width, Height);
+var Canvas: IGISCanvas := Svg;   // keeps Svg alive
+Svg.BeginGroup(0.5);             // optional: blend a layer as a whole
+Layer.DrawLayer(Canvas, PixelConverter);
+Svg.EndGroup;
+Svg.SaveToFile('map.svg');
+```
+
+Images (tiles, point symbols) are embedded in the file, once each. With no device
+to measure text on, `MeasureText` estimates from Helvetica character widths; that
+only decides whether a label fits, as the viewer does the horizontal alignment.
 
 - Renders vector layers (points, lines, polygons) on any `IGISCanvas`
 - Styling per layer through `Style` (`TGISStroke` and `TGISFill`), or per shape by
@@ -92,7 +107,7 @@ The repository includes a demo application that exercises the full library:
 - Map background color
 - Reorder, remove and save layers
 - Go back and forward through earlier map views
-- Export the current map view as a PNG or BMP image
+- Export the current map view as a PNG or BMP image, or as an SVG drawing
 
 ---
 
@@ -128,4 +143,5 @@ The rendering tests draw to a bitmap and read the pixels back, which is the only
 way to confirm that a polygon hole is genuinely cut out rather than painted over.
 They need `Vcl.Graphics` and GDI+, unlike the rest of the suite, so they are
 compiled only under `{$IFDEF MSWINDOWS}` and the suite still builds where VCL is
-unavailable.
+unavailable. The SVG canvas is tested on the document it writes, which needs
+neither.
