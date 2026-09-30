@@ -167,6 +167,11 @@ type
     // The pixels a shape may stick out of its layer's bounding box, so that a view fitted to
     // the layers keeps the outermost symbols on the map
     Function  LayersMargin: Single;
+    // The dialog filter offering the formats, and the extension each gives a name without one
+    Procedure FormatFilter(const Formats: TArray<TGISFileFormat>; out Filter: String; out Extensions: TArray<String>);
+    // The index of the format the name typed in a save dialog names by its extension, when that
+    // is one of Extensions, or else of the filter selected; a name without an extension gets that one's
+    Function  SavedFormat(const Dlg: TSaveDialog; const Extensions: TArray<String>; var FileName: String): Integer;
     Procedure HideUnknownLayers;
     Procedure SetProjection(NewProjection: TMapProjection; const KeepView: Boolean = true);
     Procedure UpdateSelectedLayerPanel;
@@ -320,6 +325,28 @@ begin
       if Layer.Shapes.ShapeCount(stPoint) > 0 then Margin := Margin + 0.5*Layer.Shapes.PointRenderSize;
       if Margin > Result then Result := Margin;
     end;
+end;
+
+Procedure TMainForm.FormatFilter(const Formats: TArray<TGISFileFormat>; out Filter: String; out Extensions: TArray<String>);
+begin
+  Filter := '';
+  Extensions := [];
+  for var FF in Formats do
+  begin
+    if Filter <> '' then Filter := Filter + '|';
+    Filter := Filter + FF.DialogFilter;
+    Extensions := Extensions + [FF.Extensions[0]];
+  end;
+end;
+
+Function TMainForm.SavedFormat(const Dlg: TSaveDialog; const Extensions: TArray<String>; var FileName: String): Integer;
+begin
+  FileName := Dlg.FileName;
+  var Ext := ExtractFileExt(FileName);
+  for var Index := low(Extensions) to high(Extensions) do
+    if SameText(Ext,Extensions[Index]) then Exit(Index);
+  Result := Dlg.FilterIndex-1;
+  if Ext = '' then FileName := FileName + Extensions[Result];
 end;
 
 Procedure TMainForm.HideUnknownLayers;
@@ -732,6 +759,7 @@ end;
 Procedure TMainForm.SaveImageExecute(Sender: TObject);
 var
   Dlg: TSaveDialog;
+  FileName: String;
 begin
   Dlg := TSaveDialog.Create(nil);
   try
@@ -741,21 +769,19 @@ begin
     Dlg.DefaultExt  := 'png';
     Dlg.Options     := [ofOverwritePrompt];
     if Dlg.Execute then
-      if SameText(ExtractFileExt(Dlg.FileName), '.svg') then
-        SaveSvgImage(Dlg.FileName)
-      else
-      if SameText(ExtractFileExt(Dlg.FileName), '.bmp') then
-        ShapesImage.SaveToFile(Dlg.FileName)
-      else
-      begin
-        var PNG := TPngImage.Create;
-        try
-          PNG.Assign(ShapesImage);
-          PNG.SaveToFile(Dlg.FileName);
-        finally
-          PNG.Free;
-        end;
-      end;
+    case SavedFormat(Dlg, ['.png', '.bmp', '.svg'], FileName) of
+      0: begin
+           var PNG := TPngImage.Create;
+           try
+             PNG.Assign(ShapesImage);
+             PNG.SaveToFile(FileName);
+           finally
+             PNG.Free;
+           end;
+         end;
+      1: ShapesImage.SaveToFile(FileName);
+      2: SaveSvgImage(FileName);
+    end;
   finally
     Dlg.Free;
   end;
@@ -818,7 +844,8 @@ Procedure TMainForm.SaveLayerExecute(Sender: TObject);
 var
   Idx: Integer;
   Writable: TArray<TGISFileFormat>;
-  Filter: String;
+  Filter, FileName: String;
+  Extensions: TArray<String>;
   Dlg: TSaveDialog;
 begin
   Idx := LayerListBox.ItemIndex;
@@ -827,19 +854,15 @@ begin
   for var FF in FileFormats do
     if FF.CanWrite then Writable := Writable + [FF];
   if Length(Writable) = 0 then Exit;
-  Filter := '';
-  for var FF in Writable do
-  begin
-    if Filter <> '' then Filter := Filter + '|';
-    Filter := Filter + FF.DialogFilter;
-  end;
+  FormatFilter(Writable, Filter, Extensions);
   Dlg := TSaveDialog.Create(nil);
   try
     Dlg.Filter      := Filter;
     Dlg.FilterIndex := 1;
+    Dlg.DefaultExt  := Copy(Extensions[0], 2, MaxInt);
     Dlg.Options     := [ofOverwritePrompt];
     if Dlg.Execute then
-      Writable[Dlg.FilterIndex - 1].SaveLayer(Dlg.FileName, Layers[Idx]);
+      Writable[SavedFormat(Dlg, Extensions, FileName)].SaveLayer(FileName, Layers[Idx]);
   finally
     Dlg.Free;
   end;
@@ -848,7 +871,8 @@ end;
 Procedure TMainForm.SaveLayersExecute(Sender: TObject);
 var
   MultiLayer: TArray<TGISFileFormat>;
-  Filter: String;
+  Filter, FileName: String;
+  Extensions: TArray<String>;
   Dlg: TSaveDialog;
 begin
   if Layers.Count = 0 then Exit;
@@ -856,12 +880,7 @@ begin
   for var FF in FileFormats do
     if FF.CanWrite and FF.MultiLayerSupport then MultiLayer := MultiLayer + [FF];
   if Length(MultiLayer) = 0 then Exit;
-  Filter := '';
-  for var FF in MultiLayer do
-  begin
-    if Filter <> '' then Filter := Filter + '|';
-    Filter := Filter + FF.DialogFilter;
-  end;
+  FormatFilter(MultiLayer, Filter, Extensions);
   var All: TArray<TLayer>;
   SetLength(All, Layers.Count);
   for var I := 0 to Layers.Count - 1 do All[I] := Layers[I];
@@ -869,9 +888,10 @@ begin
   try
     Dlg.Filter      := Filter;
     Dlg.FilterIndex := 1;
+    Dlg.DefaultExt  := Copy(Extensions[0], 2, MaxInt);
     Dlg.Options     := [ofOverwritePrompt];
     if Dlg.Execute then
-      MultiLayer[Dlg.FilterIndex - 1].SaveLayers(Dlg.FileName, All);
+      MultiLayer[SavedFormat(Dlg, Extensions, FileName)].SaveLayers(FileName, All);
   finally
     Dlg.Free;
   end;
