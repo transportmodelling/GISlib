@@ -18,8 +18,8 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.Geopackage,
-  GIS.CoordConv.WGS84;
+  System.SysUtils, DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI,
+  GIS.Shapes.Geopackage, GIS.CoordConv.WGS84;
 
 const
   GpkgLayerName = 'Provincies';
@@ -33,6 +33,10 @@ type
     Procedure CheckFileExists;
     Function  TempFile: String;
     Procedure DeleteTempFile;
+    // The geometry blob a layer writer stores for a shape
+    Function WrittenGeometry(const Shape: TGISShape): TBytes;
+    Function Int32At(const Bytes: TBytes; const Position: Integer): Int32;
+    Function DoubleAt(const Bytes: TBytes; const Position: Integer): Double;
   public
     // Reader tests
     [Test] Procedure LayerNames_ContainsExpectedLayer;
@@ -52,6 +56,8 @@ type
     [Test] Procedure Writer_RoundTrip_ProvincesShapefile;
     [Test] Procedure Writer_ConverterOverload_StoresCorrectSRS;
     [Test] Procedure Writer_RoundTrip_SRID;
+    [Test] Procedure Writer_TwoOuterRings_WritesMultiPolygon;
+    [Test] Procedure Writer_HoleListedFirst_WritesOuterRingFirst;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +65,7 @@ implementation
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.SysUtils, System.IOUtils, FireDAC.Comp.Client;
+  System.IOUtils, Data.DB, FireDAC.Comp.Client;
 
 Function TGeopackageTests.DataPath: String;
 begin
@@ -270,6 +276,52 @@ end;
 ////////////////////////////////////////////////////////////////////////////////
 // Writer tests
 ////////////////////////////////////////////////////////////////////////////////
+
+Function TGeopackageTests.WrittenGeometry(const Shape: TGISShape): TBytes;
+begin
+  DeleteTempFile;
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('polys', 4326);
+      try
+        LW.WriteShape(Shape, nil);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  Pkg := TGeopackage.Create(TempFile);
+  try
+    var Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Pkg.Connection;
+      Q.SQL.Text := 'SELECT CAST(geom AS BLOB) FROM polys';
+      Q.Open;
+      Result := Q.Fields[0].AsBytes;
+    finally
+      Q.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  DeleteTempFile;
+end;
+
+Function TGeopackageTests.Int32At(const Bytes: TBytes; const Position: Integer): Int32;
+begin
+  Move(Bytes[Position], Result, SizeOf(Result));
+end;
+
+Function TGeopackageTests.DoubleAt(const Bytes: TBytes; const Position: Integer): Double;
+begin
+  Move(Bytes[Position], Result, SizeOf(Result));
+end;
 
 Procedure TGeopackageTests.Writer_CreatesFile;
 begin
@@ -577,6 +629,42 @@ begin
 
   Assert.AreEqual(32631, ReadSRID, 'Reader.SRID should match the SRID the layer was written with');
   DeleteTempFile;
+end;
+
+Procedure TGeopackageTests.Writer_TwoOuterRings_WritesMultiPolygon;
+// Two outer rings in one WKB Polygon would read as an outer ring with a hole.
+// The blob is the 8-byte GeoPackage header, then the WKB byte order, type and count.
+var
+  Parts: TMultiPoints;
+  Shape: TGISShape;
+begin
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(0, 0), TCoordinate.Create(1, 0), TCoordinate.Create(1, 1), TCoordinate.Create(0, 1)];
+  Parts[1] := [TCoordinate.Create(3, 0), TCoordinate.Create(4, 0), TCoordinate.Create(4, 1), TCoordinate.Create(3, 1)];
+  Shape.AssignPolyPolygon(Parts);
+  var Bytes := WrittenGeometry(Shape);
+  Assert.AreEqual(1, Integer(Bytes[8]), 'Little-endian');
+  Assert.AreEqual(6, Int32At(Bytes, 9), 'WKB MultiPolygon');
+  Assert.AreEqual(2, Int32At(Bytes, 13), 'Polygons');
+end;
+
+Procedure TGeopackageTests.Writer_HoleListedFirst_WritesOuterRingFirst;
+// WKB takes the first ring of a polygon as its outer ring, whatever order the shape holds them in.
+// After the ring count comes the point count of the first ring, then its first point.
+var
+  Parts: TMultiPoints;
+  Shape: TGISShape;
+begin
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(-1, -1), TCoordinate.Create(1, -1), TCoordinate.Create(1, 1), TCoordinate.Create(-1, 1)];
+  Parts[1] := [TCoordinate.Create(-5, -5), TCoordinate.Create(5, -5), TCoordinate.Create(5, 5), TCoordinate.Create(-5, 5)];
+  Shape.AssignPolyPolygon(Parts);
+  var Bytes := WrittenGeometry(Shape);
+  Assert.AreEqual(1, Integer(Bytes[8]), 'Little-endian');
+  Assert.AreEqual(3, Int32At(Bytes, 9), 'WKB Polygon');
+  Assert.AreEqual(2, Int32At(Bytes, 13), 'Rings');
+  Assert.AreEqual(5, Int32At(Bytes, 17), 'Points of the first ring');
+  Assert.AreEqual(-5.0, DoubleAt(Bytes, 21), 1e-12, 'First ring starts at the outer ring');
 end;
 
 initialization

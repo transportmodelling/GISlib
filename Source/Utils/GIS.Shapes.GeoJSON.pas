@@ -13,7 +13,7 @@ interface
 
 Uses
   SysUtils, Classes, Rtti, Generics.Collections, JSON, JSON.Types, JSON.Writers, JSON.ObjArr,
-  Json.Eval, GIS, GIS.Shapes;
+  Json.Eval, GIS, GIS.Shapes, GIS.Shapes.Polygon;
 
 Type
   TGeoJSONReader = Class(TGISShapesReader)
@@ -52,6 +52,9 @@ Type
     Procedure WriteCoordinateValue(const Point: TCoordinate);
     Procedure WriteCoordinateValues(const MultiPoint: TMultiPoint); overload;
     Procedure WriteCoordinateValues(const MultiPoints: TMultiPoints); overload;
+    Procedure WriteCoordinateValues(const Polygons: TArray<TMultiPoints>); overload;
+    // The rings with each of them closed, as GeoJSON requires
+    Function ClosedRings(const Rings: TMultiPoints): TMultiPoints;
     Procedure WriteEndFeature(const Properties: array of TPair<String,TValue>);
   public
     Constructor Create(const FileName: String;
@@ -61,9 +64,11 @@ Type
     Procedure WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: array of TPair<String,TValue>);
     Procedure WriteLineString(LineString: TMultiPoint; const Properties: array of TPair<String,TValue>);
     Procedure WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: array of TPair<String,TValue>);
-    // Writes a polygon; rings are closed automatically if first ≠ last point.
+    // Writes a polygon, its outer ring first and then its holes; rings are closed automatically
     Procedure WritePolygon(const Parts: TMultiPoints; const Properties: array of TPair<String,TValue>);
-    // Convenience: writes any TGISShape with empty properties.
+    // Writes a multi polygon, the rings of each polygon as for WritePolygon
+    Procedure WriteMultiPolygon(const Polygons: TArray<TMultiPoints>; const Properties: array of TPair<String,TValue>);
+    // Writes any TGISShape with empty properties; a polygon shape with more than one outer ring becomes a multi polygon
     Procedure WriteShape(const Shape: TGISShape);
     Destructor Destroy; override;
   end;
@@ -326,6 +331,27 @@ begin
   JSONWriter.WriteEndArray;
 end;
 
+Procedure TGeoJSONWriter.WriteCoordinateValues(const Polygons: TArray<TMultiPoints>);
+begin
+  JSONWriter.WriteStartArray;
+  for var Polygon := low(Polygons) to high(Polygons) do WriteCoordinateValues(Polygons[Polygon]);
+  JSONWriter.WriteEndArray;
+end;
+
+Function TGeoJSONWriter.ClosedRings(const Rings: TMultiPoints): TMultiPoints;
+begin
+  SetLength(Result,Length(Rings));
+  for var Ring := low(Rings) to high(Rings) do
+  begin
+    Result[Ring] := Rings[Ring];
+    var Count := Length(Result[Ring]);
+    if (Count > 0) and
+       ((Result[Ring][0].X <> Result[Ring][Count-1].X) or
+        (Result[Ring][0].Y <> Result[Ring][Count-1].Y)) then
+      Result[Ring] := Result[Ring] + [Result[Ring][0]];
+  end;
+end;
+
 Procedure TGeoJSONWriter.WriteEndFeature(const Properties: array of TPair<String,TValue>);
 begin
   JSONWriter.WriteEndObject;
@@ -374,29 +400,27 @@ begin
 end;
 
 Procedure TGeoJSONWriter.WritePolygon(const Parts: TMultiPoints; const Properties: array of TPair<String,TValue>);
-var
-  ClosedParts: TMultiPoints;
 begin
-  // Close any open rings before writing (GeoJSON requires first point = last point)
-  SetLength(ClosedParts, Length(Parts));
-  for var Ring := low(Parts) to high(Parts) do
-  begin
-    ClosedParts[Ring] := Parts[Ring];
-    // Close ring
-    var NClosedParts := Length(ClosedParts[Ring]);
-    if (NClosedParts > 0) and
-       ((ClosedParts[Ring][0].X <> ClosedParts[Ring][NClosedParts-1].X) or
-        (ClosedParts[Ring][0].Y <> ClosedParts[Ring][NClosedParts-1].Y)) then
-      ClosedParts[Ring] := ClosedParts[Ring] + [ClosedParts[Ring][0]];
-  end;
   WriteStartFeature('Polygon');
-  WriteCoordinateValues(ClosedParts);
+  WriteCoordinateValues(ClosedRings(Parts));
+  WriteEndFeature(Properties);
+end;
+
+Procedure TGeoJSONWriter.WriteMultiPolygon(const Polygons: TArray<TMultiPoints>; const Properties: array of TPair<String,TValue>);
+var
+  ClosedPolygons: TArray<TMultiPoints>;
+begin
+  SetLength(ClosedPolygons,Length(Polygons));
+  for var Polygon := low(Polygons) to high(Polygons) do ClosedPolygons[Polygon] := ClosedRings(Polygons[Polygon]);
+  WriteStartFeature('MultiPolygon');
+  WriteCoordinateValues(ClosedPolygons);
   WriteEndFeature(Properties);
 end;
 
 Procedure TGeoJSONWriter.WriteShape(const Shape: TGISShape);
 var
   Parts: TMultiPoints;
+  Polygons: TArray<TMultiPoints>;
 begin
   case Shape.ShapeType of
     stPoint:
@@ -412,9 +436,16 @@ begin
       end;
     stPolygon:
       begin
-        SetLength(Parts,Shape.Count);
-        for var Part := 0 to Shape.Count - 1 do Parts[Part] := Shape.Parts[Part].AsMultiPoint;
-        WritePolygon(Parts,[]);
+        // The rings are sorted into outer rings and their holes, which is how GeoJSON takes them
+        var PolyPolygons := TPolyPolygons.Create(Shape);
+        if PolyPolygons.Count = 1 then
+          WritePolygon(PolyPolygons[0].Rings,[])
+        else
+        begin
+          SetLength(Polygons,PolyPolygons.Count);
+          for var Polygon := 0 to PolyPolygons.Count-1 do Polygons[Polygon] := PolyPolygons[Polygon].Rings;
+          WriteMultiPolygon(Polygons,[]);
+        end;
       end;
   end;
 end;

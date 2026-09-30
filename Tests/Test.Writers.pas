@@ -16,7 +16,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
+  System.JSON, DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
 
 type
   [TestFixture]
@@ -24,12 +24,16 @@ type
   private
     Function TempFile: String;
     Procedure DeleteTempFile;
+    // The document WriteShape writes for a shape; the caller frees it
+    Function WrittenDocument(const Shape: TGISShape): TJSONValue;
   public
     [Test] Procedure WritePoint_RoundTrip;
     [Test] Procedure WritePolygon_RoundTrip;
     [Test] Procedure WritePolygon_RingClosedAutomatically;
     [Test] Procedure WriteLineString_RoundTrip;
     [Test] Procedure WriteMultipleShapes_AllRead;
+    [Test] Procedure WriteShape_TwoOuterRings_WritesMultiPolygon;
+    [Test] Procedure WriteShape_HoleListedFirst_WritesOuterRingFirst;
   end;
 
   [TestFixture]
@@ -62,6 +66,19 @@ end;
 Procedure TGeoJSONWriterTests.DeleteTempFile;
 begin
   if FileExists(TempFile) then DeleteFile(TempFile);
+end;
+
+Function TGeoJSONWriterTests.WrittenDocument(const Shape: TGISShape): TJSONValue;
+begin
+  DeleteTempFile;
+  var W := TGeoJSONWriter.Create(TempFile);
+  try
+    W.WriteShape(Shape);
+  finally
+    W.Free;
+  end;
+  Result := TJSONObject.ParseJSONValue(TFile.ReadAllText(TempFile));
+  DeleteTempFile;
 end;
 
 Procedure TGeoJSONWriterTests.WritePoint_RoundTrip;
@@ -219,6 +236,45 @@ begin
   end;
   Assert.AreEqual(3, Count, 'All three shapes should be read back');
   DeleteTempFile;
+end;
+
+Procedure TGeoJSONWriterTests.WriteShape_TwoOuterRings_WritesMultiPolygon;
+// Two outer rings in one Polygon would read as an outer ring with a hole
+var
+  Parts: TMultiPoints;
+  Shape: TGISShape;
+begin
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(0, 0), TCoordinate.Create(1, 0), TCoordinate.Create(1, 1), TCoordinate.Create(0, 1)];
+  Parts[1] := [TCoordinate.Create(3, 0), TCoordinate.Create(4, 0), TCoordinate.Create(4, 1), TCoordinate.Create(3, 1)];
+  Shape.AssignPolyPolygon(Parts);
+  var Document := WrittenDocument(Shape);
+  try
+    Assert.AreEqual('MultiPolygon', Document.GetValue<String>('features[0].geometry.type'));
+    Assert.AreEqual(2, Document.GetValue<TJSONArray>('features[0].geometry.coordinates').Count, 'Polygons');
+  finally
+    Document.Free;
+  end;
+end;
+
+Procedure TGeoJSONWriterTests.WriteShape_HoleListedFirst_WritesOuterRingFirst;
+// GeoJSON takes the first ring of a polygon as its outer ring, whatever order the shape holds them in
+var
+  Parts: TMultiPoints;
+  Shape: TGISShape;
+begin
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(-1, -1), TCoordinate.Create(1, -1), TCoordinate.Create(1, 1), TCoordinate.Create(-1, 1)];
+  Parts[1] := [TCoordinate.Create(-5, -5), TCoordinate.Create(5, -5), TCoordinate.Create(5, 5), TCoordinate.Create(-5, 5)];
+  Shape.AssignPolyPolygon(Parts);
+  var Document := WrittenDocument(Shape);
+  try
+    Assert.AreEqual('Polygon', Document.GetValue<String>('features[0].geometry.type'));
+    Assert.AreEqual(2, Document.GetValue<TJSONArray>('features[0].geometry.coordinates').Count, 'Rings');
+    Assert.AreEqual(-5.0, Document.GetValue<Double>('features[0].geometry.coordinates[0][0][0]'), 1e-12, 'First ring starts at the outer ring');
+  finally
+    Document.Free;
+  end;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////

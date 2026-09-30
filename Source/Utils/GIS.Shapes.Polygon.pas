@@ -27,6 +27,8 @@ Type
     Function DistanceToRing(const [ref] Point: TCoordinate; const [ref] Ring: TShapePart): Float64;
   public
     Function HolesCount: Integer;
+    // The rings of the polygon, the outer ring first and then its holes, as WKB and GeoJSON take them
+    Function Rings: TMultiPoints;
     Function PointLocation(const [ref] Point: TCoordinate; out Hole: Integer): TPointLocation;
     Function Distance(const [ref] Point: TCoordinate): Float64; overload;
     Function Distance(const [ref] Point: TCoordinate; out Location: TPointLocation): Float64; overload;
@@ -159,6 +161,13 @@ end;
 Function TPolyPolygon.HolesCount: Integer;
 begin
   Result := Length(FHoles);
+end;
+
+Function TPolyPolygon.Rings: TMultiPoints;
+begin
+  SetLength(Result,1+Length(FHoles));
+  Result[0] := FOuterRing.AsMultiPoint;
+  for var Hole := low(FHoles) to high(FHoles) do Result[Hole+1] := FHoles[Hole].AsMultiPoint;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////

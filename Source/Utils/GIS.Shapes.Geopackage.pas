@@ -17,7 +17,7 @@ interface
 uses
   SysUtils, Classes, Variants,
   Generics.Collections,
-  GIS, GIS.Shapes, GIS.CoordConv,
+  GIS, GIS.Shapes, GIS.Shapes.Polygon, GIS.CoordConv,
   FireDAC.Stan.Def,
   FireDAC.Stan.Async,
   FireDAC.DApt,
@@ -108,6 +108,7 @@ type
     Procedure WriteRing  (Stream: TStream; const Part: TShapePart);
     Procedure WritePointWKB(Stream: TStream; const Shape: TGISShape);
     Procedure WriteLineWKB(Stream: TStream; const Shape: TGISShape);
+    Procedure WritePolygonRingsWKB(Stream: TStream; const PolyPolygon: TPolyPolygon);
     Procedure WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
   private
     FConnection: TFDConnection;  // not owned — belongs to TGeopackageWriter
@@ -637,11 +638,30 @@ begin
   end;
 end;
 
-Procedure TGeopackageLayerWriter.WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
+Procedure TGeopackageLayerWriter.WritePolygonRingsWKB(Stream: TStream; const PolyPolygon: TPolyPolygon);
 begin
-  WriteInt32LE(Stream,3);  // WKBPolygon — all parts are rings
-  WriteInt32LE(Stream,Shape.Count);
-  for var Part := 0 to Shape.Count-1 do WriteRing(Stream,Shape.Parts[Part]);
+  WriteInt32LE(Stream,3);  // WKBPolygon
+  WriteInt32LE(Stream,1+PolyPolygon.HolesCount);
+  WriteRing(Stream,PolyPolygon.OuterRing);
+  for var Hole := 0 to PolyPolygon.HolesCount-1 do WriteRing(Stream,PolyPolygon.Holes[Hole]);
+end;
+
+Procedure TGeopackageLayerWriter.WritePolygonWKB(Stream: TStream; const Shape: TGISShape);
+// The rings are sorted into outer rings and their holes, which is how WKB takes them
+begin
+  var PolyPolygons := TPolyPolygons.Create(Shape);
+  if PolyPolygons.Count = 1 then
+    WritePolygonRingsWKB(Stream,PolyPolygons[0])
+  else
+  begin
+    WriteInt32LE(Stream,6);  // WKBMultiPolygon
+    WriteInt32LE(Stream,PolyPolygons.Count);
+    for var Polygon := 0 to PolyPolygons.Count-1 do
+    begin
+      WriteByte(Stream,1);   // sub-geometry byte order
+      WritePolygonRingsWKB(Stream,PolyPolygons[Polygon]);
+    end;
+  end;
 end;
 
 Function TGeopackageLayerWriter.ShapeToBlob(const Shape: TGISShape): TBytes;
