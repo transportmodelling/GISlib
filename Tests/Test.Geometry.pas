@@ -74,6 +74,13 @@ type
     [Test] Procedure Contains_PointInLShapeNotch;
   end;
 
+  [TestFixture]
+  TGISShapeTests = class
+  public
+    [Test] Procedure AssignPoints_FromCoordinates_EnclosesTheBoundingBox;
+    [Test] Procedure AssignPoints_FromShapePart_EnclosesTheBoundingBox;
+  end;
+
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,9 +298,36 @@ begin
   Assert.IsFalse(LShape.Contains(TCoordinate.Create(1.5, 0.5)));
 end;
 
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TGISShapeTests.AssignPoints_FromCoordinates_EnclosesTheBoundingBox;
+var
+  Shape: TGISShape;
+begin
+  Shape.AssignPoints([TCoordinate.Create(1, 2), TCoordinate.Create(-3, 5)]);
+  Assert.AreEqual(-3.0, Shape.BoundingBox.Left, 1e-12, 'Left');
+  Assert.AreEqual( 1.0, Shape.BoundingBox.Right, 1e-12, 'Right');
+  Assert.AreEqual( 2.0, Shape.BoundingBox.Bottom, 1e-12, 'Bottom');
+  Assert.AreEqual( 5.0, Shape.BoundingBox.Top, 1e-12, 'Top');
+end;
+
+Procedure TGISShapeTests.AssignPoints_FromShapePart_EnclosesTheBoundingBox;
+// The same shape, built from the part the other overload builds
+var
+  Shape: TGISShape;
+begin
+  Shape.AssignPoints(TShapePart.Create([TCoordinate.Create(1, 2), TCoordinate.Create(-3, 5)]));
+  Assert.IsFalse(Shape.BoundingBox.Empty, 'Bounding box is empty');
+  Assert.AreEqual(-3.0, Shape.BoundingBox.Left, 1e-12, 'Left');
+  Assert.AreEqual( 1.0, Shape.BoundingBox.Right, 1e-12, 'Right');
+  Assert.AreEqual( 2.0, Shape.BoundingBox.Bottom, 1e-12, 'Bottom');
+  Assert.AreEqual( 5.0, Shape.BoundingBox.Top, 1e-12, 'Top');
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TCoordinateRectTests);
   TDUnitX.RegisterTestFixture(TCoordinateTests);
   TDUnitX.RegisterTestFixture(TShapePartTests);
+  TDUnitX.RegisterTestFixture(TGISShapeTests);
 
 end.

@@ -277,6 +277,7 @@ begin
   FShapeType := stPoint;
   SetLength(FParts,1);
   FParts[0] := Points;
+  FBoundingBox.Enclose(FParts[0].FBoundingBox);
 end;
 
 Procedure TGISShape.AssignLine(const Points: array of TCoordinate);
