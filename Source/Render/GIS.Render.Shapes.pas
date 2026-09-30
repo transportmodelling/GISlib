@@ -519,6 +519,7 @@ end;
 
 Procedure TShapesLayer.Clear;
 begin
+  for var Shape := 0 to FCount-1 do FreeAndNil(ShapeRenderers[Shape]);
   FCount := 0;
   for var ShapeType := low(TShapeType) to high(TShapeType) do FShapeCount[ShapeType] := 0;
   FBoundingBox.Clear;
@@ -550,6 +551,7 @@ begin
         SetLength(Renderer.LabelPositions,Renderer.PolyPolygons.Count);
         ShapeRenderers[FCount] := Renderer;
       end;
+    else raise Exception.Create('Cannot add an empty shape');
   end;
   Inc(FCount);
   Inc(FShapeCount[Shape.ShapeType]);
@@ -567,7 +569,9 @@ Var
 begin
   var Reader := FileFormat.Create(FileName);
   try
-    while Reader.ReadShape(Shape) do Add(Shape);
+    // A file may hold a feature without geometry; there is nothing to draw for it
+    while Reader.ReadShape(Shape) do
+    if not Shape.Empty then Add(Shape);
   finally
     Reader.Free;
   end;

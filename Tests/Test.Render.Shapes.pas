@@ -17,7 +17,7 @@ interface
 uses
   System.SysUtils, System.Classes, System.IOUtils,
   DUnitX.TestFramework,
-  GIS, GIS.Shapes,
+  GIS, GIS.Shapes, GIS.Shapes.GeoJSON,
   GIS.Render.Canvas, GIS.Render.Canvas.SVG,
   GIS.Render.Shapes, GIS.Render.PixelConv.Cartesian;
 
@@ -32,6 +32,7 @@ type
   TShapesLayerTests = class
   private
     // Two 10x10 rings with a 2x2 hole, centred at (0,0) and at (20,0)
+    Procedure AddDonuts(const Layer: TShapesLayer);
     Function TwoDonuts: TLabeledShapesLayer;
     // Draws the layer large enough for its labels to be placed
     Procedure Draw(const Layer: TShapesLayer);
@@ -40,7 +41,13 @@ type
     // The label positions the layer saves
     Function SavedLabelPositions(const Layer: TShapesLayer): TBytes;
     Procedure AssertSameBytes(const Expected,Actual: TBytes; const Message: String);
+    // The number of heap blocks allocated at this moment
+    Function AllocatedBlocks: Int64;
   public
+    [Test] Procedure Add_EmptyShape_Raises;
+    [Test] Procedure Clear_LeavesNoShapes;
+    [Test] Procedure Clear_FreesTheRenderers;
+    [Test] Procedure Read_SkipsFeaturesWithoutGeometry;
     [Test] Procedure SaveLabelPositions_WritesOnePositionPerOuterRing;
     [Test] Procedure SaveLabelPositions_AfterDrawing_WritesTheSamePositions;
     [Test] Procedure ReadLabelPositions_RoundTrips;
@@ -57,23 +64,28 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Function TShapesLayerTests.TwoDonuts: TLabeledShapesLayer;
+Procedure TShapesLayerTests.AddDonuts(const Layer: TShapesLayer);
 var
   Parts: TMultiPoints;
   Shape: TGISShape;
 begin
+  for var Offset in [0,20] do
+  begin
+    SetLength(Parts,2);
+    Parts[0] := [TCoordinate.Create(Offset-5,-5),TCoordinate.Create(Offset+5,-5),
+                 TCoordinate.Create(Offset+5,5),TCoordinate.Create(Offset-5,5)];
+    Parts[1] := [TCoordinate.Create(Offset-1,-1),TCoordinate.Create(Offset+1,-1),
+                 TCoordinate.Create(Offset+1,1),TCoordinate.Create(Offset-1,1)];
+    Shape.AssignPolyPolygon(Parts);
+    Layer.Add(Shape);
+  end;
+end;
+
+Function TShapesLayerTests.TwoDonuts: TLabeledShapesLayer;
+begin
   Result := TLabeledShapesLayer.Create;
   try
-    for var Offset in [0,20] do
-    begin
-      SetLength(Parts,2);
-      Parts[0] := [TCoordinate.Create(Offset-5,-5),TCoordinate.Create(Offset+5,-5),
-                   TCoordinate.Create(Offset+5,5),TCoordinate.Create(Offset-5,5)];
-      Parts[1] := [TCoordinate.Create(Offset-1,-1),TCoordinate.Create(Offset+1,-1),
-                   TCoordinate.Create(Offset+1,1),TCoordinate.Create(Offset-1,1)];
-      Shape.AssignPolyPolygon(Parts);
-      Result.Add(Shape);
-    end;
+    AddDonuts(Result);
   except
     Result.Free;
     raise;
@@ -113,6 +125,81 @@ begin
   Assert.AreEqual(Length(Expected),Length(Actual),Message + ': length');
   for var Index := low(Expected) to high(Expected) do
   if Expected[Index] <> Actual[Index] then Assert.Fail(Message + ': byte ' + Index.ToString);
+end;
+
+{$WARN SYMBOL_PLATFORM OFF}
+Function TShapesLayerTests.AllocatedBlocks: Int64;
+// Delphi's own memory manager keeps these counts on every platform it runs on
+var
+  State: TMemoryManagerState;
+begin
+  GetMemoryManagerState(State);
+  Result := State.AllocatedMediumBlockCount + State.AllocatedLargeBlockCount;
+  for var BlockType := low(State.SmallBlockTypeStates) to high(State.SmallBlockTypeStates) do
+  Inc(Result, State.SmallBlockTypeStates[BlockType].AllocatedBlockCount);
+end;
+{$WARN SYMBOL_PLATFORM ON}
+
+Procedure TShapesLayerTests.Add_EmptyShape_Raises;
+var
+  Shape: TGISShape;
+begin
+  Shape.Clear;
+  var Layer := TShapesLayer.Create;
+  try
+    Assert.WillRaise(Procedure begin Layer.Add(Shape) end,Exception);
+    Assert.AreEqual(0,Layer.Count,'Nothing was added');
+  finally
+    Layer.Free;
+  end;
+end;
+
+Procedure TShapesLayerTests.Clear_LeavesNoShapes;
+begin
+  var Layer := TwoDonuts;
+  try
+    Layer.Clear;
+    Assert.AreEqual(0,Layer.Count);
+    Assert.AreEqual(0,Layer.ShapeCount(stPolygon));
+    Assert.IsTrue(Layer.BoundingBox.Empty,'Bounding box');
+  finally
+    Layer.Free;
+  end;
+end;
+
+Procedure TShapesLayerTests.Clear_FreesTheRenderers;
+// Adding shapes after a Clear must not leave the shapes cleared away behind
+begin
+  var Layer := TwoDonuts;
+  try
+    Layer.Clear;
+    var Before := AllocatedBlocks;
+    AddDonuts(Layer);
+    Layer.Clear;
+    Assert.AreEqual(Before,AllocatedBlocks,'Heap blocks left allocated');
+  finally
+    Layer.Free;
+  end;
+end;
+
+Procedure TShapesLayerTests.Read_SkipsFeaturesWithoutGeometry;
+// GeoJSON allows a polygon with no rings; there is nothing to draw for it
+begin
+  var FileName := TempFileName;
+  var Layer := TShapesLayer.Create;
+  try
+    TFile.WriteAllText(FileName,
+      '{"type":"FeatureCollection","features":[' +
+      '{"type":"Feature","geometry":{"type":"Polygon","coordinates":[]},"properties":{}},' +
+      '{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1],[0,0]]]},"properties":{}}' +
+      ']}');
+    Layer.Read(FileName,TGeoJSONReader);
+    Assert.AreEqual(1,Layer.Count,'Shapes');
+    Assert.AreEqual(1,Layer.ShapeCount(stPolygon),'Polygons');
+  finally
+    Layer.Free;
+    TFile.Delete(FileName);
+  end;
 end;
 
 Procedure TShapesLayerTests.SaveLabelPositions_WritesOnePositionPerOuterRing;
