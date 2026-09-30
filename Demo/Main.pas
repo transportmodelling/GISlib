@@ -14,7 +14,7 @@ interface
 uses
   Classes, SysUtils, Math, Types, UITypes, Variants, Actions, Winapi.Windows,
   Winapi.Messages, Winapi.ShellAPI, Winapi.CommCtrl, Vcl.Graphics, Vcl.Controls, Vcl.Forms,
-  Vcl.Dialogs, Vcl.ActnList, Vcl.StdActns, Vcl.ComCtrls, Vcl.StdCtrls, PngImage,
+  Vcl.Dialogs, Vcl.ActnList, Vcl.StdActns, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Clipbrd, PngImage,
   Vcl.Samples.Spin,
   System.ImageList, Vcl.ImgList, Vcl.ExtCtrls, Vcl.ToolWin,
   System.Generics.Collections, FloatHlp,
@@ -85,6 +85,8 @@ type
     NextView: TAction;
     PreviousViewToolButton: TToolButton;
     NextViewToolButton: TToolButton;
+    CopyImage: TAction;
+    CopyImageToolButton: TToolButton;
     Procedure AddLayerAccept(Sender: TObject);
     Procedure FormCreate(Sender: TObject);
     Procedure ZoomInExecute(Sender: TObject);
@@ -115,6 +117,7 @@ type
     Procedure NextViewExecute(Sender: TObject);
     Procedure ProjectionComboBoxChange(Sender: TObject);
     Procedure ActionListUpdate(Action: TBasicAction; var Handled: Boolean);
+    Procedure CopyImageExecute(Sender: TObject);
   private
     Const
       crZoomIn  = 1;
@@ -756,6 +759,12 @@ begin
   end;
 end;
 
+Procedure TMainForm.CopyImageExecute(Sender: TObject);
+// Puts the map on the clipboard as a bitmap, as it is drawn on screen
+begin
+  Clipboard.Assign(ShapesImage);
+end;
+
 Procedure TMainForm.SaveLayerExecute(Sender: TObject);
 var
   Idx: Integer;
@@ -1016,6 +1025,7 @@ begin
   PreviousView.Enabled := Shown and ActiveConverter.PreviousAvail;
   NextView.Enabled     := Shown and ActiveConverter.NextAvail;
   SaveImage.Enabled    := Shown;
+  CopyImage.Enabled    := Shown;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
