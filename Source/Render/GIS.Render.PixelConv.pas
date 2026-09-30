@@ -26,12 +26,15 @@ Type
       Count: Integer;
       First,Last,Current: TPixelConverterState;
       FOnChange: TNotifyEvent;
+      FMargin: Float32;
     Procedure SetOnChange(OnChange: TNotifyEvent);
     Procedure ReadState(const State: TPixelConverterState); overload;
   strict protected
     FInitialized: Boolean;
     FPixelWidth,FPixelHeight: Float32;
     Procedure Changed;
+    // The pixels left for a bounding box within the margin; raises when the margin leaves none
+    Procedure RoomWithinMargin(const PixelWidth,PixelHeight: Float32; out Width,Height: Float32);
     Procedure WriteState(const Writer: TBinaryWriter); virtual; abstract;
     Procedure ReadState(const Reader: TBinaryReader); overload; virtual; abstract;
   public
@@ -64,6 +67,8 @@ Type
     Property PixelWidth: Float32 read FPixelWidth;
     Property PixelHeight: Float32 read FPixelHeight;
   public
+    // Pixels left free around the bounding box Initialize fits; takes effect on the next Initialize
+    Property Margin: Float32 read FMargin write FMargin;
     Property OnChange: TNotifyEvent read FOnChange write SetOnChange;
   end;
 
@@ -138,6 +143,13 @@ begin
     // Fire OnChange-event
     if Assigned(FOnChange) then FOnChange(Self);
   end;
+end;
+
+Procedure TCustomPixelConverter.RoomWithinMargin(const PixelWidth,PixelHeight: Float32; out Width,Height: Float32);
+begin
+  Width := PixelWidth-2*FMargin;
+  Height := PixelHeight-2*FMargin;
+  if (Width <= 0) or (Height <= 0) then raise Exception.Create('The margin leaves no room for the map');
 end;
 
 Function TCustomPixelConverter.CoordToPixel(const Xcoord,Ycoord: Float64): TPointF;

@@ -20,10 +20,8 @@ Type
     Const
       ZoomFactor = 1.5;
     Var
-      FMargin: Float32; // Pixels
       FCoordUnitsPerPixel: Float64;
       FViewport: TCoordinateRect;
-    Procedure SetMargin(Margin: Float32);
     Procedure SetViewport(const Center: TCoordinate);
   strict protected
     Procedure WriteState(const Writer: TBinaryWriter); override;
@@ -50,7 +48,6 @@ Type
     // Get viewport
     Function GetViewport: TCoordinateRect; override;
   public
-    Property Margin: Float32 read FMargin write SetMargin;
     Property CoordUnitsPerPixel: Float64 read FCoordUnitsPerPixel;
     Property Viewport: TCoordinateRect read FViewport;
   end;
@@ -58,15 +55,6 @@ Type
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
-
-Procedure TCartesianPixelConverter.SetMargin(Margin: Float32);
-begin
-  if Margin <> FMargin then
-  begin
-    FMargin := Margin;
-    if FInitialized then Initialize(FViewport,FPixelWidth,FPixelHeight);
-  end;
-end;
 
 Procedure TCartesianPixelConverter.SetViewport(const Center: TCoordinate);
 begin
@@ -138,8 +126,11 @@ begin
 end;
 
 Procedure TCartesianPixelConverter.Initialize(const BoundingBox: TCoordinateRect; const PixelWidth,PixelHeight: Float32);
+Var
+  RoomWidth,RoomHeight: Float32;
 begin
   if BoundingBox.Empty then raise Exception.Create('Cannot initialize on an empty bounding box');
+  RoomWithinMargin(PixelWidth,PixelHeight,RoomWidth,RoomHeight);
   FInitialized := true;
   FPixelWidth := PixelWidth;
   FPixelHeight := PixelHeight;
@@ -157,25 +148,10 @@ begin
     Box.Bottom := Center.Y - Size/2;
     Box.Top := Center.Y + Size/2;
   end;
-  // Set viewport
-  if PixelWidth/PixelHeight > Box.Width/Box.Height then
-  begin
-    var ScaleFactor := (PixelWidth*Box.Height)/(PixelHeight*Box.Width);
-    var DeltaWidth:= (ScaleFactor-1)*Box.Width;
-    FViewport.Left := Box.Left - DeltaWidth/2;
-    FViewport.Right := Box.Right + DeltaWidth/2;
-    FViewport.Top := Box.Top;
-    FViewport.Bottom := Box.Bottom;
-  end else
-  begin
-    var ScaleFactor := (PixelHeight*Box.Width)/(PixelWidth*Box.Height);
-    var DeltaHeight:= (ScaleFactor-1)*Box.Height;
-    FViewport.Left := Box.Left;
-    FViewport.Right := Box.Right;
-    FViewport.Top := Box.Top+DeltaHeight/2;
-    FViewport.Bottom := Box.Bottom-DeltaHeight/2;
-  end;
-  FCoordUnitsPerPixel := FViewport.Width/PixelWidth;
+  // The scale at which the box fits within the margin, centred
+  FCoordUnitsPerPixel := Box.Width/RoomWidth;
+  if Box.Height/RoomHeight > FCoordUnitsPerPixel then FCoordUnitsPerPixel := Box.Height/RoomHeight;
+  SetViewport(Box.CenterPoint);
   Changed;
 end;
 

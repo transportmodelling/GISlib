@@ -37,6 +37,8 @@ type
     [Test] Procedure Initialize_SinglePoint_CentresOnThePoint;
     [Test] Procedure Initialize_HorizontalLine_FitsTheLine;
     [Test] Procedure Initialize_EmptyBoundingBox_Raises;
+    [Test] Procedure Initialize_Margin_LeavesRoomAroundTheBox;
+    [Test] Procedure Initialize_MarginLeavingNoRoom_Raises;
     [Test] Procedure OnChange_Assigned_FiresAtOnce;
     [Test] Procedure OnChange_FiresOnEveryChange;
     [Test] Procedure OnChange_Nil_IsAccepted;
@@ -58,6 +60,7 @@ type
 
     [Test] Procedure NotInitializedByDefault;
     [Test] Procedure Initialize_SetsInitializedFlag;
+    [Test] Procedure Initialize_Margin_TakesTheZoomLevelThatFitsWithinIt;
     // SyncFrom: two converters with different CRS show the same tile layout
     [Test] Procedure SyncFrom_SameZoomLevelAndMapOrigin;
     // Resize: geographic centre stays fixed
@@ -195,6 +198,32 @@ begin
   Assert.IsFalse(FConv.Initialized, 'Not initialized');
 end;
 
+Procedure TCartesianPixelConverterTests.Initialize_Margin_LeavesRoomAroundTheBox;
+// A 10 by 10 box in 100 by 100 pixels with a margin of 10 fills the 80 pixels within the margin
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 0; BB.Right := 10; BB.Bottom := 0; BB.Top := 10;
+  FConv.Margin := 10;
+  FConv.Initialize(BB, 100, 100);
+  var TopLeft := FConv.CoordToPixel(BB.Left, BB.Top);
+  var BottomRight := FConv.CoordToPixel(BB.Right, BB.Bottom);
+  Assert.AreEqual(10.0, TopLeft.X, 1e-3, 'Left edge');
+  Assert.AreEqual(10.0, TopLeft.Y, 1e-3, 'Top edge');
+  Assert.AreEqual(90.0, BottomRight.X, 1e-3, 'Right edge');
+  Assert.AreEqual(90.0, BottomRight.Y, 1e-3, 'Bottom edge');
+end;
+
+Procedure TCartesianPixelConverterTests.Initialize_MarginLeavingNoRoom_Raises;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 0; BB.Right := 10; BB.Bottom := 0; BB.Top := 10;
+  FConv.Margin := 50;
+  Assert.WillRaise(Procedure begin FConv.Initialize(BB, 100, 100) end, Exception);
+  Assert.IsFalse(FConv.Initialized, 'Not initialized');
+end;
+
 Procedure TCartesianPixelConverterTests.OnChange_Assigned_FiresAtOnce;
 // So that whatever shows the view is brought up to date on being connected
 begin
@@ -297,6 +326,20 @@ Procedure TWebMercatorPixelConverterTests.Initialize_SetsInitializedFlag;
 begin
   FConvWGS84.Initialize(NetherlandsBBox, 1000, 800);
   Assert.IsTrue(FConvWGS84.Initialized);
+end;
+
+Procedure TWebMercatorPixelConverterTests.Initialize_Margin_TakesTheZoomLevelThatFitsWithinIt;
+// 80 degrees of longitude at the equator is a little under a quarter of the earth, which is
+// what 256 pixels show at zoom level 2; within a margin of 20 pixels that no longer fits
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := -40; BB.Right := 40; BB.Bottom := -1; BB.Top := 1;
+  FConvWGS84.Initialize(BB, 256, 256);
+  Assert.AreEqual(2, Integer(FConvWGS84.ZoomLevel), 'Without margin');
+  FConvWGS84.Margin := 20;
+  FConvWGS84.Initialize(BB, 256, 256);
+  Assert.AreEqual(1, Integer(FConvWGS84.ZoomLevel), 'Within the margin');
 end;
 
 Procedure TWebMercatorPixelConverterTests.SyncFrom_SameZoomLevelAndMapOrigin;

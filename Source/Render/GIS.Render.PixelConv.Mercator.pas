@@ -153,7 +153,10 @@ end;
 Procedure TWebMercatorPixelConverter.Initialize(const BoundingBox: TCoordinateRect; const PixelWidth,PixelHeight: Float32);
 Const
   EarthCircumference = 40075017;
+Var
+  RoomWidth,RoomHeight: Float32;
 begin
+  RoomWithinMargin(PixelWidth,PixelHeight,RoomWidth,RoomHeight);
   FInitialized := true;
   FPixelWidth := PixelWidth;
   FPixelHeight := PixelHeight;
@@ -164,12 +167,12 @@ begin
   var Center := BoundingBox.CenterPoint;
   var GeodeticCenter := FCoordinateConverter.CoordToGeodeticCoord(Center);
   var Resolution := cos(GeodeticCenter.Latitude*pi/180)*EarthCircumference/FTileSize;
-  // Determine highest zoom level that contains the bounding box
+  // Determine highest zoom level that contains the bounding box within the margin
   var Level := 0;
   repeat
     Inc(Level);
     Resolution := Resolution/2;
-  until (Resolution*PixelWidth < BoundingBoxWidth) or (Resolution*PixelHeight < BoundingBoxHeight) or (Level > MaxZoomLevel);
+  until (Resolution*RoomWidth < BoundingBoxWidth) or (Resolution*RoomHeight < BoundingBoxHeight) or (Level > MaxZoomLevel);
   SetZoomLevel(Max(1,Level-1));
   // Calculate Mercator coordinates of bounding box center
   var Xmercator := MercatorMapSize*WebMercatorProjection.LongitudeToXCoord(GeodeticCenter.Longitude);
