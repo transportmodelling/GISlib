@@ -139,26 +139,41 @@ end;
 
 Procedure TCartesianPixelConverter.Initialize(const BoundingBox: TCoordinateRect; const PixelWidth,PixelHeight: Float32);
 begin
+  if BoundingBox.Empty then raise Exception.Create('Cannot initialize on an empty bounding box');
   FInitialized := true;
   FPixelWidth := PixelWidth;
   FPixelHeight := PixelHeight;
-  // Set viewport
-  if PixelWidth/PixelHeight > BoundingBox.Width/BoundingBox.Height then
+  // A single point or a straight line has no width or no height. It is given a square of the size
+  // it does have, or of one unit, so that the view has a scale
+  var Box := BoundingBox;
+  if (Box.Width = 0) or (Box.Height = 0) then
   begin
-    var ScaleFactor := (PixelWidth*BoundingBox.Height)/(PixelHeight*BoundingBox.Width);
-    var DeltaWidth:= (ScaleFactor-1)*BoundingBox.Width;
-    FViewport.Left := BoundingBox.Left - DeltaWidth/2;
-    FViewport.Right := BoundingBox.Right + DeltaWidth/2;
-    FViewport.Top := BoundingBox.Top;
-    FViewport.Bottom := BoundingBox.Bottom;
+    var Size := Box.Width;
+    if Box.Height > Size then Size := Box.Height;
+    if Size = 0 then Size := 1;
+    var Center := Box.CenterPoint;
+    Box.Left := Center.X - Size/2;
+    Box.Right := Center.X + Size/2;
+    Box.Bottom := Center.Y - Size/2;
+    Box.Top := Center.Y + Size/2;
+  end;
+  // Set viewport
+  if PixelWidth/PixelHeight > Box.Width/Box.Height then
+  begin
+    var ScaleFactor := (PixelWidth*Box.Height)/(PixelHeight*Box.Width);
+    var DeltaWidth:= (ScaleFactor-1)*Box.Width;
+    FViewport.Left := Box.Left - DeltaWidth/2;
+    FViewport.Right := Box.Right + DeltaWidth/2;
+    FViewport.Top := Box.Top;
+    FViewport.Bottom := Box.Bottom;
   end else
   begin
-    var ScaleFactor := (PixelHeight*BoundingBox.Width)/(PixelWidth*BoundingBox.Height);
-    var DeltaHeight:= (ScaleFactor-1)*BoundingBox.Height;
-    FViewport.Left := BoundingBox.Left;
-    FViewport.Right := BoundingBox.Right;
-    FViewport.Top := BoundingBox.Top+DeltaHeight/2;
-    FViewport.Bottom := BoundingBox.Bottom-DeltaHeight/2;
+    var ScaleFactor := (PixelHeight*Box.Width)/(PixelWidth*Box.Height);
+    var DeltaHeight:= (ScaleFactor-1)*Box.Height;
+    FViewport.Left := Box.Left;
+    FViewport.Right := Box.Right;
+    FViewport.Top := Box.Top+DeltaHeight/2;
+    FViewport.Bottom := Box.Bottom-DeltaHeight/2;
   end;
   FCoordUnitsPerPixel := FViewport.Width/PixelWidth;
   Changed;

@@ -32,6 +32,9 @@ type
     // Initialize: the bounding box spans the full height or the full width
     [Test] Procedure Initialize_WideBoundingBoxSpansPixelWidth;
     [Test] Procedure Initialize_TallBoundingBoxSpansPixelHeight;
+    [Test] Procedure Initialize_SinglePoint_CentresOnThePoint;
+    [Test] Procedure Initialize_HorizontalLine_FitsTheLine;
+    [Test] Procedure Initialize_EmptyBoundingBox_Raises;
     // Resize: centre and scale stay fixed
     [Test] Procedure Resize_PreservesCentreAndScale;
     [Test] Procedure Resize_IsNotAddedToHistory;
@@ -141,6 +144,45 @@ begin
   // Centred over the width, at the scale of the height
   Assert.AreEqual(300.0, TopLeft.X, 1e-3, 'Left edge');
   Assert.AreEqual(500.0, BottomRight.X, 1e-3, 'Right edge');
+end;
+
+Procedure TCartesianPixelConverterTests.Initialize_SinglePoint_CentresOnThePoint;
+// A bounding box without width or height still gives a view, with the point in the middle
+var
+  BB: TCoordinateRect;
+begin
+  BB.Clear;
+  BB.Enclose(TCoordinate.Create(1000, 200));
+  FConv.Initialize(BB, 800, 600);
+  var Pixel := FConv.CoordToPixel(1000, 200);
+  Assert.AreEqual(400.0, Pixel.X, 1e-3, 'X');
+  Assert.AreEqual(300.0, Pixel.Y, 1e-3, 'Y');
+  Assert.IsTrue(FConv.CoordUnitsPerPixel > 0, 'Scale');
+end;
+
+Procedure TCartesianPixelConverterTests.Initialize_HorizontalLine_FitsTheLine;
+// The line from (0,5) to (10,5) gets a 10 by 10 box, which 200 by 100 pixels show at 10 pixels per unit, centred
+var
+  BB: TCoordinateRect;
+begin
+  BB.Clear;
+  BB.Enclose(TCoordinate.Create(0, 5));
+  BB.Enclose(TCoordinate.Create(10, 5));
+  FConv.Initialize(BB, 200, 100);
+  var LeftEnd := FConv.CoordToPixel(0, 5);
+  var RightEnd := FConv.CoordToPixel(10, 5);
+  Assert.AreEqual(50.0, LeftEnd.X, 1e-3, 'Left end');
+  Assert.AreEqual(150.0, RightEnd.X, 1e-3, 'Right end');
+  Assert.AreEqual(50.0, LeftEnd.Y, 1e-3, 'Height');
+end;
+
+Procedure TCartesianPixelConverterTests.Initialize_EmptyBoundingBox_Raises;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Clear;
+  Assert.WillRaise(Procedure begin FConv.Initialize(BB, 800, 600) end, Exception);
+  Assert.IsFalse(FConv.Initialized, 'Not initialized');
 end;
 
 Procedure TCartesianPixelConverterTests.Resize_PreservesCentreAndScale;
