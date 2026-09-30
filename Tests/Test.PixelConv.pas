@@ -61,6 +61,7 @@ type
     [Test] Procedure NotInitializedByDefault;
     [Test] Procedure Initialize_SetsInitializedFlag;
     [Test] Procedure Initialize_Margin_TakesTheZoomLevelThatFitsWithinIt;
+    [Test] Procedure GeodeticCoordToPixel_BeyondTheMap_IsClampedToItsEdge;
     // SyncFrom: two converters with different CRS show the same tile layout
     [Test] Procedure SyncFrom_SameZoomLevelAndMapOrigin;
     // Resize: geographic centre stays fixed
@@ -340,6 +341,29 @@ begin
   FConvWGS84.Margin := 20;
   FConvWGS84.Initialize(BB, 256, 256);
   Assert.AreEqual(1, Integer(FConvWGS84.ZoomLevel), 'Within the margin');
+end;
+
+Procedure TWebMercatorPixelConverterTests.GeodeticCoordToPixel_BeyondTheMap_IsClampedToItsEdge;
+// Web Mercator reaches neither pole; a vertex beyond its edge is drawn on the edge rather
+// than aborting the layer
+var
+  BB: TCoordinateRect;
+  Coord: TGeodeticCoordinate;
+begin
+  BB.Left := -10; BB.Right := 10; BB.Bottom := 40; BB.Top := 60;
+  FConvWGS84.Initialize(BB, 256, 256);
+  Coord.Longitude := 0;
+  Coord.Latitude := 89;
+  var Beyond := FConvWGS84.GeodeticCoordToPixel(Coord);
+  Coord.Latitude := 85;
+  var Edge := FConvWGS84.GeodeticCoordToPixel(Coord);
+  Assert.IsTrue(Beyond.Y <= Edge.Y, 'At or above the 85th parallel');
+  Coord.Latitude := 50;
+  Coord.Longitude := 200;
+  Beyond := FConvWGS84.GeodeticCoordToPixel(Coord);
+  Coord.Longitude := 180;
+  Edge := FConvWGS84.GeodeticCoordToPixel(Coord);
+  Assert.AreEqual(Edge.X, Beyond.X, 1e-3, 'On the antimeridian');
 end;
 
 Procedure TWebMercatorPixelConverterTests.SyncFrom_SameZoomLevelAndMapOrigin;

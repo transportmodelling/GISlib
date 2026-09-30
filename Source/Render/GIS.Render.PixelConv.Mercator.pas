@@ -115,11 +115,15 @@ begin
 end;
 
 Function TWebMercatorPixelConverter.GeodeticCoordToPixel(const Coord: TGeodeticCoordinate): TPointF;
+// Web Mercator reaches neither pole. A coordinate beyond the map is put on its edge, so that a
+// shape reaching there is drawn as far as the map goes rather than aborting its layer
 begin
   if FInitialized then
   begin
-    var Xmercator := MercatorMapSize*WebMercatorProjection.LongitudeToXCoord(Coord.Longitude);
-    var Ymercator := MercatorMapSize*WebMercatorProjection.LatitudeToYCoord(Coord.Latitude);
+    var Longitude := EnsureRange(Coord.Longitude,-180,180);
+    var Latitude := EnsureRange(Coord.Latitude,WebMercatorProjection.MinLatitude,WebMercatorProjection.MaxLatitude);
+    var Xmercator := MercatorMapSize*WebMercatorProjection.LongitudeToXCoord(Longitude);
+    var Ymercator := MercatorMapSize*WebMercatorProjection.LatitudeToYCoord(Latitude);
     Result.X := Xmercator - MercatorMapLeft;
     Result.Y := Ymercator - MercatorMapTop;
   end else
