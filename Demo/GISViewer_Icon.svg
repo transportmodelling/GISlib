@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2F80C8"/>
+      <stop offset="1" stop-color="#1B4F8A"/>
+    </linearGradient>
+    <clipPath id="map">
+      <path d="M40 72 L96 52 L160 72 L216 52 L216 184 L160 204 L96 184 L40 204 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg)"/>
+
+  <!-- Folded map -->
+  <g clip-path="url(#map)">
+    <rect x="40" y="52" width="176" height="152" fill="#F4F1E6"/>
+    <!-- Land polygon -->
+    <path d="M40 150 L78 128 L112 142 L140 112 L180 124 L216 100 L216 204 L40 204 Z" fill="#8CC66B"/>
+    <!-- Water polygon -->
+    <path d="M40 52 L104 52 L92 82 L62 96 L40 90 Z" fill="#7FBCE8"/>
+    <!-- Road polyline -->
+    <path d="M40 176 L88 160 L128 172 L170 150 L216 160" fill="none" stroke="#E0A030" stroke-width="7" stroke-linejoin="round"/>
+    <!-- Fold shading -->
+    <path d="M96 52 L160 72 L160 204 L96 184 Z" fill="#000000" opacity="0.10"/>
+  </g>
+  <path d="M40 72 L96 52 L160 72 L216 52 L216 184 L160 204 L96 184 L40 204 Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+
+  <!-- Location pin -->
+  <path d="M150 36 C126 36 108 54 108 77 C108 108 150 148 150 148 C150 148 192 108 192 77 C192 54 174 36 150 36 Z" fill="#E5473D" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+  <circle cx="150" cy="77" r="15" fill="#FFFFFF"/>
+</svg>

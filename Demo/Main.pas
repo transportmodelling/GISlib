@@ -22,7 +22,7 @@ uses
   FireDAC.Comp.UI, FireDAC.VCLUI.Wait,
   GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.Canvas, GIS.Render.Canvas.VCL,
   GIS.Render.Canvas.SVG, GIS.Render.PixelConv, GIS.Render.PixelConv.Cartesian, GIS.Render.PixelConv.Mercator,
-  GIS.Render.Tiles.OSM, GIS.CoordConv, GIS.CoordConv.WGS84;
+  GIS.Render.Tiles.OSM, GIS.CoordConv, GIS.CoordConv.WGS84, Vcl.TitleBarCtrls;
 
 type
   TZoomStyle = (zsNone,zsMove,zsZoomIn,zsZoomOut);
@@ -89,6 +89,7 @@ type
     NextViewToolButton: TToolButton;
     CopyImage: TAction;
     CopyImageToolButton: TToolButton;
+    TitleBarPanel: TTitleBarPanel;
     Procedure AddLayerAccept(Sender: TObject);
     Procedure FormCreate(Sender: TObject);
     Procedure ZoomInExecute(Sender: TObject);

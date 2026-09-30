@@ -1,12 +1,13 @@
 object MainForm: TMainForm
   Left = 0
   Top = 0
-  Caption = 'ShapesDemo'
+  Caption = 'GISViewer'
   ClientHeight = 860
   ClientWidth = 1362
   Color = clBtnFace
+  CustomTitleBar.Control = TitleBarPanel
+  CustomTitleBar.Enabled = True
   CustomTitleBar.Height = 31
-  CustomTitleBar.ShowCaption = False
   CustomTitleBar.ShowIcon = False
   CustomTitleBar.StyleColors = True
   CustomTitleBar.SystemColors = False
@@ -28,6 +29,7 @@ object MainForm: TMainForm
   Font.Height = -11
   Font.Name = 'Tahoma'
   Font.Style = []
+  GlassFrame.Enabled = True
   GlassFrame.Top = 31
   Position = poScreenCenter
   ShowHint = True
@@ -38,9 +40,9 @@ object MainForm: TMainForm
   TextHeight = 13
   object LayerPanel: TPanel
     Left = 0
-    Top = 0
+    Top = 30
     Width = 216
-    Height = 841
+    Height = 811
     Align = alLeft
     BevelOuter = bvNone
     TabOrder = 1
@@ -48,7 +50,7 @@ object MainForm: TMainForm
       Left = 202
       Top = 0
       Width = 14
-      Height = 841
+      Height = 811
       Align = alRight
       Caption = '<'
       TabOrder = 0
@@ -58,13 +60,13 @@ object MainForm: TMainForm
       Left = 0
       Top = 0
       Width = 202
-      Height = 841
+      Height = 811
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
       object SelectedLayerPanel: TPanel
         Left = 0
-        Top = 441
+        Top = 411
         Width = 202
         Height = 339
         Align = alBottom
@@ -73,7 +75,7 @@ object MainForm: TMainForm
       end
       object MapPanel: TPanel
         Left = 0
-        Top = 780
+        Top = 750
         Width = 202
         Height = 61
         Align = alBottom
@@ -127,7 +129,7 @@ object MainForm: TMainForm
         Left = 0
         Top = 29
         Width = 202
-        Height = 412
+        Height = 382
         Align = alClient
         ItemHeight = 13
         TabOrder = 1
@@ -247,9 +249,9 @@ object MainForm: TMainForm
   end
   object GISPanel: TPanel
     Left = 216
-    Top = 0
+    Top = 30
     Width = 1146
-    Height = 841
+    Height = 811
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 2
@@ -257,7 +259,7 @@ object MainForm: TMainForm
       Left = 0
       Top = 30
       Width = 1146
-      Height = 811
+      Height = 781
       Margins.Top = 0
       Align = alClient
       OnMouseDown = PaintBoxMouseDown
@@ -340,6 +342,13 @@ object MainForm: TMainForm
         Action = CopyImage
       end
     end
+  end
+  object TitleBarPanel: TTitleBarPanel
+    Left = 0
+    Top = 0
+    Width = 1362
+    Height = 30
+    CustomButtons = <>
   end
   object ActionList: TActionList
     Images = ImageList
