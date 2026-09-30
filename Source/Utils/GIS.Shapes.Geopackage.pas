@@ -117,7 +117,10 @@ type
     FSRID: Integer;
     FPropNames: TArray<String>;
     FQuery: TFDQuery;
+    FBoundingBox: TCoordinateRect;  // of the shapes written
     Function ShapeToBlob(const Shape: TGISShape): TBytes;
+    // Encloses the bounds of the layer in gpkg_contents in those of the shapes written
+    Procedure UpdateBounds;
   public
     Constructor Create(const Connection: TFDConnection; const LayerName: String;
                        const SRID: Integer; const PropNames: TArray<String>);
@@ -619,6 +622,7 @@ begin
   FQuery := TFDQuery.Create(nil);
   FQuery.Connection := FConnection;
   FQuery.SQL.Text := SQL;
+  FBoundingBox.Clear;
   // All shapes go in one transaction rather than one each, which is many times faster
   FConnection.StartTransaction;
 end;
@@ -708,6 +712,29 @@ begin
   end;
 end;
 
+Procedure TGeopackageLayerWriter.UpdateBounds;
+// A layer written in several sessions keeps the bounds of the earlier ones: a bound still
+// NULL takes the new value, one that is not takes the wider of the two
+begin
+  var Query := TFDQuery.Create(nil);
+  try
+    Query.Connection := FConnection;
+    Query.SQL.Text :=
+      'UPDATE gpkg_contents SET ' +
+      'min_x = MIN(IFNULL(min_x, 1e308), :minx), min_y = MIN(IFNULL(min_y, 1e308), :miny), ' +
+      'max_x = MAX(IFNULL(max_x, -1e308), :maxx), max_y = MAX(IFNULL(max_y, -1e308), :maxy) ' +
+      'WHERE table_name = :name';
+    Query.ParamByName('minx').AsFloat := FBoundingBox.Left;
+    Query.ParamByName('miny').AsFloat := FBoundingBox.Bottom;
+    Query.ParamByName('maxx').AsFloat := FBoundingBox.Right;
+    Query.ParamByName('maxy').AsFloat := FBoundingBox.Top;
+    Query.ParamByName('name').AsString := FLayerName;
+    Query.ExecSQL;
+  finally
+    Query.Free;
+  end;
+end;
+
 Procedure TGeopackageLayerWriter.WriteShape(const Shape: TGISShape; const Properties: TGISShapeProperties);
 begin
   var Blob := ShapeToBlob(Shape);
@@ -733,11 +760,13 @@ begin
     end;
 
     FQuery.ExecSQL;
+    FBoundingBox.Enclose(Shape.BoundingBox);
   end;
 end;
 
 Destructor TGeopackageLayerWriter.Destroy;
 begin
+  if not FBoundingBox.Empty then UpdateBounds;
   if FConnection.InTransaction then FConnection.Commit;
   FQuery.Free;
   inherited Destroy;
@@ -787,6 +816,10 @@ end;
 
 Procedure TGeopackageWriter.InitSchema;
 begin
+  // The file says it is a GeoPackage, of version 1.3.0, as the specification requires
+  ExecSQL('PRAGMA application_id = 1196444487');  // 'GPKG'
+  ExecSQL('PRAGMA user_version = 10300');
+
   ExecSQL(
     'CREATE TABLE IF NOT EXISTS gpkg_spatial_ref_sys (' +
     '  srs_name TEXT NOT NULL, srs_id INTEGER NOT NULL PRIMARY KEY,' +

@@ -33,6 +33,8 @@ type
     Procedure CheckFileExists;
     Function  TempFile: String;
     Procedure DeleteTempFile;
+    // The first value the query yields on the temp file
+    Function QueryValue(const SQL: String): Variant;
     // The geometry blob a layer writer stores for a shape
     Function WrittenGeometry(const Shape: TGISShape): TBytes;
     Function Int32At(const Bytes: TBytes; const Position: Integer): Int32;
@@ -62,6 +64,8 @@ type
     [Test] Procedure Writer_HoleListedFirst_WritesOuterRingFirst;
     [Test] Procedure Writer_NamesNeedingQuotes_RoundTrip;
     [Test] Procedure Writer_ManyShapes_AllReadBack;
+    [Test] Procedure Writer_NewFile_IdentifiesItselfAsGeoPackage;
+    [Test] Procedure Writer_StoresTheLayerBounds;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -280,6 +284,24 @@ end;
 ////////////////////////////////////////////////////////////////////////////////
 // Writer tests
 ////////////////////////////////////////////////////////////////////////////////
+
+Function TGeopackageTests.QueryValue(const SQL: String): Variant;
+begin
+  var Pkg := TGeopackage.Create(TempFile);
+  try
+    var Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Pkg.Connection;
+      Q.SQL.Text := SQL;
+      Q.Open;
+      Result := Q.Fields[0].Value;
+    finally
+      Q.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+end;
 
 Function TGeopackageTests.WrittenGeometry(const Shape: TGISShape): TBytes;
 begin
@@ -764,6 +786,46 @@ begin
   finally
     Pkg.Free;
   end;
+  DeleteTempFile;
+end;
+
+Procedure TGeopackageTests.Writer_NewFile_IdentifiesItselfAsGeoPackage;
+// The specification requires the application id 'GPKG' and the version, 10300 for 1.3.0
+begin
+  WritePoints(1);
+  Assert.AreEqual(Int64($47504B47), Int64(QueryValue('PRAGMA application_id')), 'application_id');
+  Assert.AreEqual(Int64(10300), Int64(QueryValue('PRAGMA user_version')), 'user_version');
+  DeleteTempFile;
+end;
+
+Procedure TGeopackageTests.Writer_StoresTheLayerBounds;
+var
+  Shape: TGISShape;
+begin
+  DeleteTempFile;
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('points', 4326);
+      try
+        Shape.AssignPoint(1, 2);
+        LW.WriteShape(Shape, nil);
+        Shape.AssignPoint(-3, 5);
+        LW.WriteShape(Shape, nil);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  Assert.AreEqual(-3.0, Double(QueryValue('SELECT min_x FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'min_x');
+  Assert.AreEqual( 2.0, Double(QueryValue('SELECT min_y FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'min_y');
+  Assert.AreEqual( 1.0, Double(QueryValue('SELECT max_x FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'max_x');
+  Assert.AreEqual( 5.0, Double(QueryValue('SELECT max_y FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'max_y');
   DeleteTempFile;
 end;
 
