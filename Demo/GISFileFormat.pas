@@ -154,7 +154,8 @@ begin
     if Dialog.ShowModal = mrOk then
     begin
       Result := ACoordSystems[Combo.ItemIndex];
-      Result.Configure;
+      // Cancelling the system's own dialog cancels the selection
+      if not Result.Configure then Result := nil;
     end;
   finally
     Dialog.Free;
@@ -397,8 +398,8 @@ begin
         finally
           Reader.Free;
         end;
-        ACoordSystem.Configure;
-        Result := True;
+        // Cancelling the system's own dialog cancels the selection
+        Result := ACoordSystem.Configure;
       end;
     finally
       Dialog.Free;

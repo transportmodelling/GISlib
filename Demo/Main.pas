@@ -150,6 +150,7 @@ type
       Repainting: Boolean;
       BackgroundColor: TColor;
       DisplayCoordConverter: TCoordinateConverter;
+      DisplayCoordSystem: Integer;  // index in CoordinateSystems of the system it converts to
       FileFormats:       TArray<TGISFileFormat>;
       CoordinateSystems: TArray<TGISCoordinateSystem>;
       // Offered when opening a file, ahead of CoordinateSystems
@@ -487,16 +488,19 @@ Procedure TMainForm.CoordSystemComboBoxChange(Sender: TObject);
 var
   Idx: Integer;
 begin
-  FreeAndNil(DisplayCoordConverter);
   Idx := CoordSystemComboBox.ItemIndex;
-  if (Idx >= 0) and (Idx < Length(CoordinateSystems)) then
+  if (Idx < 0) or (Idx >= Length(CoordinateSystems)) then Idx := 0;
+  // Cancelling the system's own dialog keeps the system selected before
+  if not CoordinateSystems[Idx].Configure then
   begin
-    CoordinateSystems[Idx].Configure;
-    CoordSystemComboBox.Items[Idx] := CoordinateSystems[Idx].Name;
-    CoordSystemComboBox.ItemIndex := Idx;  // re-select: Items[Idx] assignment does not refresh the displayed text
-    DisplayCoordConverter := CoordinateSystems[Idx].CreateConverter;
-  end else
-    DisplayCoordConverter := CoordinateSystems[0].CreateConverter;
+    CoordSystemComboBox.ItemIndex := DisplayCoordSystem;
+    Exit;
+  end;
+  FreeAndNil(DisplayCoordConverter);
+  DisplayCoordSystem := Idx;
+  CoordSystemComboBox.Items[Idx] := CoordinateSystems[Idx].Name;
+  CoordSystemComboBox.ItemIndex := Idx;  // re-select: Items[Idx] assignment does not refresh the displayed text
+  DisplayCoordConverter := CoordinateSystems[Idx].CreateConverter;
   XCoordPanel.Caption := '';
   YCoordPanel.Caption := '';
 end;

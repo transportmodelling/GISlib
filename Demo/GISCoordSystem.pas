@@ -26,10 +26,11 @@ type
     // Caller owns the returned converter
     Function CreateConverter: TCoordinateConverter; virtual; abstract;
     // Called once when the user explicitly selects this system, so systems with
-    // extra parameters (e.g. UTM zone/hemisphere) can prompt for them. No-op by
-    // default; CreateConverter must not prompt, since it is also called from
+    // extra parameters (e.g. UTM zone/hemisphere) can prompt for them. False when
+    // the user cancels, in which case the system is not used. True by default;
+    // CreateConverter must not prompt, since it is also called from
     // non-interactive contexts (e.g. saving a layer).
-    Procedure Configure; virtual;
+    Function Configure: Boolean; virtual;
     // Optional hint when the file being opened carries its own CRS metadata
     // (e.g. a GeoPackage layer's stored SRID). Systems with extra parameters
     // can use this as a starting point for Configure. No-op by default.
@@ -92,7 +93,7 @@ type
     Function Name: String; override;
     Function SRID: Integer; override;
     Function CreateConverter: TCoordinateConverter; override;
-    Procedure Configure; override;
+    Function Configure: Boolean; override;
     Procedure HintSRID(const SRID: Integer); override;
   end;
 
@@ -105,9 +106,10 @@ begin
   Result := Name;
 end;
 
-Procedure TGISCoordinateSystem.Configure;
+Function TGISCoordinateSystem.Configure: Boolean;
 begin
   // No parameters to configure by default
+  Result := True;
 end;
 
 Procedure TGISCoordinateSystem.HintSRID(const SRID: Integer);
@@ -254,7 +256,7 @@ begin
   Result := TUtmCoordinateConverter.Create(FZone, FHemisphere);
 end;
 
-Procedure TUtmCoordinateSystem.Configure;
+Function TUtmCoordinateSystem.Configure: Boolean;
 var
   Dialog: TForm;
   ZoneLbl: TLabel;
@@ -303,7 +305,8 @@ begin
     CancelBtn.Caption     := 'Cancel';
     CancelBtn.ModalResult := mrCancel;
 
-    if Dialog.ShowModal = mrOk then
+    Result := Dialog.ShowModal = mrOk;
+    if Result then
     begin
       FZone := ZoneSpin.Value;
       if HemisphereGroup.ItemIndex = 0 then FHemisphere := hpNorth else FHemisphere := hpSouth;
