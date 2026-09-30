@@ -823,7 +823,11 @@ end;
 Function TGeopackageWriter.CreateLayerWriter(const LayerName: String;
                                              const Converter: TCoordinateConverter): TGeopackageLayerWriter;
 begin
-  InsertSRS(Converter.SRID, Converter.SRSName, 'EPSG', Converter.SRSDefinition);
+  // The undefined systems (-1 Cartesian, 0 geographic) belong to no organization
+  if Converter.SRID > 0 then
+    InsertSRS(Converter.SRID, Converter.SRSName, 'EPSG', Converter.SRSDefinition)
+  else
+    InsertSRS(Converter.SRID, Converter.SRSName, 'NONE', Converter.SRSDefinition);
   Result := CreateLayerWriter(LayerName, Converter.SRID, []);
 end;
 
