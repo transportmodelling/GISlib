@@ -79,7 +79,8 @@ implementation
 
 Constructor TGeoJSONReader.TGeoJSONStreamReader.Create(const FileName: TFileName);
 begin
-  inherited Create(FileName,Tencoding.ANSI);
+  // GeoJSON is UTF-8 by definition (RFC 7946), with or without a byte order mark
+  inherited Create(FileName,TEncoding.UTF8,true);
   SkipToFeatures;
 end;
 

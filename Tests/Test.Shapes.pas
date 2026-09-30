@@ -17,7 +17,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI;
+  System.SysUtils, DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
 
 type
   [TestFixture]
@@ -61,11 +61,27 @@ type
     [Test] Procedure CpgUnknownCodePage_DetectsUTF8;
   end;
 
+  // GeoJSON is UTF-8 by definition (RFC 7946), with or without a byte order mark
+  [TestFixture]
+  TGeoJSONReaderEncodingTests = class
+  private
+    FDir: String;
+    // The name property of the one feature in a file holding Bytes
+    Function FeatureName(const Bytes: TBytes): String;
+    // A feature collection with one feature named Frysl-a-circumflex-n, as UTF-8
+    Function Utf8Document: TBytes;
+  public
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
+    [Test] Procedure Utf8WithoutBom;
+    [Test] Procedure Utf8WithBom;
+  end;
+
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-uses System.SysUtils, System.IOUtils;
+uses System.IOUtils;
 
 Function TESRIShapeFileReaderTests.DataPath: String;
 begin
@@ -244,8 +260,56 @@ begin
   Assert.AreEqual('Frysl'#$E2'n', ProvinceName('99999'));
 end;
 
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TGeoJSONReaderEncodingTests.Setup;
+begin
+  FDir := TPath.Combine(TPath.GetTempPath, 'GISlibGeoJSON' + TGUID.NewGuid.ToString);
+  TDirectory.CreateDirectory(FDir);
+end;
+
+Procedure TGeoJSONReaderEncodingTests.TearDown;
+begin
+  TDirectory.Delete(FDir, true);
+end;
+
+Function TGeoJSONReaderEncodingTests.FeatureName(const Bytes: TBytes): String;
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var FileName := TPath.Combine(FDir, 'Feature.geojson');
+  TFile.WriteAllBytes(FileName, Bytes);
+  var Reader := TGeoJSONReader.Create(FileName);
+  try
+    Assert.IsTrue(Reader.ReadShape(Shape, Props), 'A feature is read');
+    Result := String(Props.ValueFromName['name']);
+  finally
+    Reader.Free;
+  end;
+end;
+
+Function TGeoJSONReaderEncodingTests.Utf8Document: TBytes;
+begin
+  Result := TEncoding.UTF8.GetBytes(
+    '{"type":"FeatureCollection","features":[' +
+    '{"type":"Feature","geometry":{"type":"Point","coordinates":[5.8,53.2]},' +
+    '"properties":{"name":"Frysl'#$E2'n"}}]}');
+end;
+
+Procedure TGeoJSONReaderEncodingTests.Utf8WithoutBom;
+begin
+  Assert.AreEqual('Frysl'#$E2'n', FeatureName(Utf8Document));
+end;
+
+Procedure TGeoJSONReaderEncodingTests.Utf8WithBom;
+begin
+  Assert.AreEqual('Frysl'#$E2'n', FeatureName(TEncoding.UTF8.GetPreamble + Utf8Document));
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TESRIShapeFileReaderTests);
   TDUnitX.RegisterTestFixture(TESRIShapeFileEncodingTests);
+  TDUnitX.RegisterTestFixture(TGeoJSONReaderEncodingTests);
 
 end.
