@@ -21,7 +21,7 @@ uses
   GISCoordSystem, GISFileFormat, RndrCtrl, RndrCtrl.Default,
   FireDAC.Comp.UI, FireDAC.VCLUI.Wait,
   GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.Canvas, GIS.Render.Canvas.VCL,
-  GIS.Render.PixelConv, GIS.Render.PixelConv.Cartesian, GIS.Render.PixelConv.Mercator,
+  GIS.Render.Canvas.SVG, GIS.Render.PixelConv, GIS.Render.PixelConv.Cartesian, GIS.Render.PixelConv.Mercator,
   GIS.Render.Tiles.OSM, GIS.CoordConv, GIS.CoordConv.WGS84;
 
 type
@@ -155,6 +155,8 @@ type
     Procedure LayerPropertyChanged(Sender: TObject);
     Procedure ConverterChanged(Sender: TObject);
     Procedure OpenShapeFile(const FileName: String);
+    Procedure ApplyLayerStyle(const Layer: TLayer);
+    Procedure SaveSvgImage(const FileName: String);
   public
     Procedure AddGISLayer(const ALayer: TLayer);
     Procedure WMDropFiles(var msg: TWMDropFiles); message WM_DROPFILES;
@@ -667,11 +669,14 @@ begin
   Dlg := TSaveDialog.Create(nil);
   try
     Dlg.Title       := 'Save map image';
-    Dlg.Filter      := 'PNG image|*.png|Bitmap|*.bmp';
+    Dlg.Filter      := 'PNG image|*.png|Bitmap|*.bmp|SVG image|*.svg';
     Dlg.FilterIndex := 1;
     Dlg.DefaultExt  := 'png';
     Dlg.Options     := [ofOverwritePrompt];
     if Dlg.Execute then
+      if SameText(ExtractFileExt(Dlg.FileName), '.svg') then
+        SaveSvgImage(Dlg.FileName)
+      else
       if SameText(ExtractFileExt(Dlg.FileName), '.bmp') then
         ShapesImage.SaveToFile(Dlg.FileName)
       else
@@ -686,6 +691,53 @@ begin
       end;
   finally
     Dlg.Free;
+  end;
+end;
+
+Procedure TMainForm.ApplyLayerStyle(const Layer: TLayer);
+begin
+  var LayerStyle := Layer.Shapes.Style;
+  LayerStyle.Stroke := TGISStroke.Create(AlphaColor(Layer.PenColor),
+                                         Layer.PenWidth,GISPenStyle(Layer.PenStyle));
+  LayerStyle.Fill   := TGISFill.Create(AlphaColor(Layer.BrushColor),
+                                       GISBrushStyle(Layer.BrushStyle));
+  // The canvas takes a font size in pixels, the layer a point size
+  LayerStyle.Text.Size  := Layer.TextSize*CurrentPPI/72;
+  LayerStyle.Text.Color := AlphaColor(Layer.TextColor);
+  Layer.Shapes.Style := LayerStyle;
+end;
+
+Procedure TMainForm.SaveSvgImage(const FileName: String);
+// Draws the map again, on an SVG canvas of the size of the view, rather than
+// saving the pixels of ShapesImage: the shapes stay shapes in the file.
+begin
+  var Svg := TSvgCanvas.Create(ShapesImage.Width,ShapesImage.Height);
+  var Canvas: IGISCanvas := Svg;   // keeps Svg alive, and releases it
+  Screen.Cursor := crHourGlass;
+  try
+    Canvas.FillRect(TRectF.Create(0,0,ShapesImage.Width,ShapesImage.Height),
+                    TGISFill.Create(AlphaColor(BackgroundColor)),
+                    TGISStroke.Create(TAlphaColorRec.Null,0,gpsClear));
+    if ShowOSM.Checked and MercatorConverter.Initialized then
+      OSMLayer.DrawLayer(Canvas,MercatorConverter);
+    for var Layer in Layers do
+      if Layer.Visible then
+      begin
+        ApplyLayerStyle(Layer);
+        // A group takes the place of the bitmap a layer is blended with on screen
+        Svg.BeginGroup(Layer.Opacity/255);
+        try
+          if Projection = mpCartesian then
+            Layer.Shapes.DrawLayer(Canvas,CartesianConverter)
+          else
+            Layer.Shapes.DrawLayer(Canvas,Layer.Converter);
+        finally
+          Svg.EndGroup;
+        end;
+      end;
+    Svg.SaveToFile(FileName);
+  finally
+    Screen.Cursor := crDefault;
   end;
 end;
 
@@ -1059,15 +1111,7 @@ begin
               LayerImage.Width  := ShapesImage.Width;
               LayerImage.Height := ShapesImage.Height;
               LayerImage.Canvas.Draw(0,0,ShapesImage);
-              var LayerStyle := Layer.Shapes.Style;
-              LayerStyle.Stroke := TGISStroke.Create(AlphaColor(Layer.PenColor),
-                                                     Layer.PenWidth,GISPenStyle(Layer.PenStyle));
-              LayerStyle.Fill   := TGISFill.Create(AlphaColor(Layer.BrushColor),
-                                                   GISBrushStyle(Layer.BrushStyle));
-              // The canvas takes a font size in pixels, the layer a point size
-              LayerStyle.Text.Size  := Layer.TextSize*CurrentPPI/72;
-              LayerStyle.Text.Color := AlphaColor(Layer.TextColor);
-              Layer.Shapes.Style := LayerStyle;
+              ApplyLayerStyle(Layer);
               if Projection = mpCartesian then
                 Layer.Shapes.DrawLayer(GISCanvas(LayerImage),CartesianConverter)
               else
