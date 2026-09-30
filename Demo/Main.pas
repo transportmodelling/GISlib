@@ -577,14 +577,21 @@ end;
 ////////////////////////////////////////////////////////////////////////////////
 
 Procedure TMainForm.WMDropFiles(var msg: TWMDropFiles);
-const
-  MaxFileName = 255;
 var
-  FileName: array[0..MaxFileName] of char;
+  FileName: String;
 begin
-  DragQueryFile(msg.Drop,0,FileName,MaxFileName);
-  OpenShapeFile(FileName);
-  DragFinish(msg.Drop);
+  try
+    // Every file dropped, each name as long as it is
+    var Count := DragQueryFile(msg.Drop,$FFFFFFFF,nil,0);
+    for var Index := 0 to Count-1 do
+    begin
+      SetLength(FileName,DragQueryFile(msg.Drop,Index,nil,0));
+      DragQueryFile(msg.Drop,Index,PChar(FileName),Length(FileName)+1);
+      OpenShapeFile(FileName);
+    end;
+  finally
+    DragFinish(msg.Drop);
+  end;
 end;
 
 Procedure TMainForm.WMSize(var Message: TWMSize);
