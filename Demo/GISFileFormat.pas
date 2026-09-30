@@ -72,6 +72,11 @@ type
                          const ACoordSystems: TArray<TGISCoordinateSystem>;
                          out ALayerName: String;
                          out ACoordSystem: TGISCoordinateSystem): Boolean;
+    // Writes the layer's shapes as a layer of the package, named after the layer without its
+    // file prefix, or after the file when the layer has no name
+    Procedure WriteLayer(const AWriter: TGeopackageWriter;
+                         const ALayer: TLayer;
+                         const AFileName: String);
   public
     Function Name: String; override;
     Function Extensions: TArray<String>; override;
@@ -457,8 +462,9 @@ begin
   Result := True;
 end;
 
-Procedure TGeoPackageFileFormat.SaveLayer(const AFileName: String;
-                                          const ALayer: TLayer);
+Procedure TGeoPackageFileFormat.WriteLayer(const AWriter: TGeopackageWriter;
+                                           const ALayer: TLayer;
+                                           const AFileName: String);
 var
   LayerName: String;
 begin
@@ -470,17 +476,29 @@ begin
     LayerName := ALayer.Name;
   if LayerName = '' then
     LayerName := ChangeFileExt(ExtractFileName(AFileName), '');
+  // The layer writer reads the coordinate system off the converter without taking it over
+  var Converter := ALayer.CoordSystem.CreateConverter;
+  try
+    var LW := AWriter.CreateLayerWriter(LayerName, Converter);
+    try
+      for var I := 0 to ALayer.Shapes.Count - 1 do
+        LW.WriteShape(ALayer.Shapes[I], nil);
+    finally
+      LW.Free;
+    end;
+  finally
+    Converter.Free;
+  end;
+end;
+
+Procedure TGeoPackageFileFormat.SaveLayer(const AFileName: String;
+                                          const ALayer: TLayer);
+begin
   var Pkg := TGeopackage.Create(AFileName, gpReadWrite);
   try
     var Writer := Pkg.CreateWriter;
     try
-      var LW := Writer.CreateLayerWriter(LayerName, ALayer.CoordSystem.CreateConverter);
-      try
-        for var I := 0 to ALayer.Shapes.Count - 1 do
-          LW.WriteShape(ALayer.Shapes[I], nil);
-      finally
-        LW.Free;
-      end;
+      WriteLayer(Writer, ALayer, AFileName);
     finally
       Writer.Free;
     end;
@@ -491,27 +509,12 @@ end;
 
 Procedure TGeoPackageFileFormat.SaveLayers(const AFileName: String;
                                            const ALayers: TArray<TLayer>);
-var
-  Pkg: TGeopackage;
-  Writer: TGeopackageWriter;
 begin
-  Pkg := TGeopackage.Create(AFileName, gpReadWrite);
+  var Pkg := TGeopackage.Create(AFileName, gpReadWrite);
   try
-    Writer := Pkg.CreateWriter;
+    var Writer := Pkg.CreateWriter;
     try
-      for var Layer in ALayers do
-      begin
-        var LayerName := Layer.Name;
-        var P := Pos(' / ', LayerName);
-        if P > 0 then LayerName := Copy(LayerName, P + 3, MaxInt);
-        var LW := Writer.CreateLayerWriter(LayerName, Layer.CoordSystem.CreateConverter);
-        try
-          for var I := 0 to Layer.Shapes.Count - 1 do
-            LW.WriteShape(Layer.Shapes[I], nil);
-        finally
-          LW.Free;
-        end;
-      end;
+      for var Layer in ALayers do WriteLayer(Writer, Layer, AFileName);
     finally
       Writer.Free;
     end;
