@@ -18,8 +18,8 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.SysUtils, DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI,
-  GIS.Shapes.Geopackage, GIS.CoordConv.WGS84;
+  System.SysUtils, System.Generics.Collections, DUnitX.TestFramework, GIS, GIS.Shapes,
+  GIS.Shapes.ESRI, GIS.Shapes.Geopackage, GIS.CoordConv.WGS84;
 
 const
   GpkgLayerName = 'Provincies';
@@ -58,6 +58,7 @@ type
     [Test] Procedure Writer_RoundTrip_SRID;
     [Test] Procedure Writer_TwoOuterRings_WritesMultiPolygon;
     [Test] Procedure Writer_HoleListedFirst_WritesOuterRingFirst;
+    [Test] Procedure Writer_NamesNeedingQuotes_RoundTrip;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -665,6 +666,52 @@ begin
   Assert.AreEqual(2, Int32At(Bytes, 13), 'Rings');
   Assert.AreEqual(5, Int32At(Bytes, 17), 'Points of the first ring');
   Assert.AreEqual(-5.0, DoubleAt(Bytes, 21), 1e-12, 'First ring starts at the outer ring');
+end;
+
+Procedure TGeopackageTests.Writer_NamesNeedingQuotes_RoundTrip;
+// A layer name with a space and a hyphen, a field name with a space and one that is a reserved word
+const
+  LayerName = 'road segments-2024';
+var
+  Written, Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFile;
+  Written.AssignPoint(4.9, 52.4);
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter(LayerName, 4326, ['road name', 'order']);
+      try
+        LW.WriteShape(Written, [TPair<String,Variant>.Create('road name', 'Main Street'),
+                                TPair<String,Variant>.Create('order', 3)]);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  Pkg := TGeopackage.Create(TempFile);
+  try
+    var Names := Pkg.LayerNames;
+    Assert.AreEqual(1, Integer(Length(Names)), 'Layers');
+    Assert.AreEqual(LayerName, Names[0]);
+    var Reader := Pkg.CreateReader(LayerName);
+    try
+      Assert.IsTrue(Reader.ReadShape(Read, Props), 'A shape is read');
+      Assert.AreEqual('Main Street', String(Props.ValueFromName['road name']));
+      Assert.AreEqual('3', String(Props.ValueFromName['order']));
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  DeleteTempFile;
 end;
 
 initialization

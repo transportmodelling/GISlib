@@ -133,6 +133,7 @@ type
     Procedure ExecSQL(const SQL: String);
     Procedure InitSchema;
     Procedure InsertSRS(SRSID: Integer; const Name,OrgName,Definition: String);
+    Procedure RegisterLayer(const LayerName: String; const SRID: Integer);
   public
     Constructor Create(Package: TGeopackage);
     // Add a new feature layer; PropNames lists extra attribute columns (TEXT).
@@ -153,6 +154,13 @@ const
   // GeoPackage envelope sizes in bytes, indexed by envelope indicator (bits 1–3
   // of the flags byte): 0=none, 1=XY(32), 2=XYZ(48), 3=XYM(48), 4=XYZM(64).
   GpkgEnvSize: array[0..4] of Integer = (0, 32, 48, 48, 64);
+
+Function QuotedIdentifier(const Name: String): String;
+// A table or column name as SQL takes it whatever it holds: in double quotes, with a double quote doubled.
+// Shared by the reader and the writers, which have no common ancestor.
+begin
+  Result := '"' + Name.Replace('"','""',[rfReplaceAll]) + '"';
+end;
 
 Constructor TGeopackage.Create(const FileName: TFileName; Mode: TGeopackageMode = gpRead);
 begin
@@ -253,16 +261,16 @@ begin
   try
     ColList := '';
     PragmaQuery.Connection := FConnection;
-    PragmaQuery.SQL.Text := 'PRAGMA table_info(' + LayerName + ')';
+    PragmaQuery.SQL.Text := 'PRAGMA table_info(' + QuotedIdentifier(LayerName) + ')';
     PragmaQuery.Open;
     while not PragmaQuery.Eof do
     begin
       if ColList <> '' then ColList := ColList + ', ';
       var ColName := PragmaQuery.FieldByName('name').AsString;
       if SameText(ColName,FGeomColumnName) then
-        ColList := ColList + 'CAST(' + ColName + ' AS BLOB) AS ' + ColName
+        ColList := ColList + 'CAST(' + QuotedIdentifier(ColName) + ' AS BLOB) AS ' + QuotedIdentifier(ColName)
       else
-        ColList := ColList + ColName;
+        ColList := ColList + QuotedIdentifier(ColName);
       PragmaQuery.Next;
     end;
   finally
@@ -271,7 +279,7 @@ begin
   // Open the Query
   FQuery := TFDQuery.Create(nil);
   FQuery.Connection := FConnection;
-  FQuery.SQL.Text := 'SELECT ' + ColList + ' FROM ' + LayerName;
+  FQuery.SQL.Text := 'SELECT ' + ColList + ' FROM ' + QuotedIdentifier(LayerName);
   FQuery.Open;
 end;
 
@@ -600,11 +608,11 @@ begin
   FLayerName := LayerName;
   FSRID := SRID;
   FPropNames := PropNames;
-  // Prepare reusable INSERT statement
-  var SQL := 'INSERT INTO ' + LayerName + ' (geom';
-  for var PropName := low(PropNames) to high(PropNames) do SQL := SQL + ', ' + PropNames[PropName];
+  // Prepare reusable INSERT statement: the geometry parameter first, then one per property in order
+  var SQL := 'INSERT INTO ' + QuotedIdentifier(LayerName) + ' (geom';
+  for var PropName := low(PropNames) to high(PropNames) do SQL := SQL + ', ' + QuotedIdentifier(PropNames[PropName]);
   SQL := SQL + ') VALUES (:geom';
-  for var PropName := low(PropNames) to high(PropNames) do SQL := SQL + ', :' + PropNames[PropName];
+  for var PropName := low(PropNames) to high(PropNames) do SQL := SQL + ', :p' + IntToStr(PropName);
   SQL := SQL + ')';
   // Create query
   FQuery := TFDQuery.Create(nil);
@@ -718,7 +726,7 @@ begin
         PropVal := VarToStr(Properties[Prop].Value);
         Break;
       end;
-      FQuery.ParamByName(FPropNames[PropName]).AsString := PropVal;
+      FQuery.Params[PropName+1].AsString := PropVal;
     end;
 
     FQuery.ExecSQL;
@@ -803,6 +811,31 @@ begin
     'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]');
 end;
 
+Procedure TGeopackageWriter.RegisterLayer(const LayerName: String; const SRID: Integer);
+// Registers the layer's table in gpkg_contents and its geometry column in gpkg_geometry_columns
+begin
+  var Query := TFDQuery.Create(nil);
+  try
+    Query.Connection := FConnection;
+    Query.SQL.Text :=
+      'INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, srs_id) ' +
+      'VALUES (:name, ''features'', :identifier, :srid)';
+    Query.ParamByName('name').AsString := LayerName;
+    Query.ParamByName('identifier').AsString := LayerName;
+    Query.ParamByName('srid').AsInteger := SRID;
+    Query.ExecSQL;
+    Query.SQL.Text :=
+      'INSERT OR IGNORE INTO gpkg_geometry_columns ' +
+      '(table_name, column_name, geometry_type_name, srs_id, z, m) ' +
+      'VALUES (:name, ''geom'', ''GEOMETRY'', :srid, 0, 0)';
+    Query.ParamByName('name').AsString := LayerName;
+    Query.ParamByName('srid').AsInteger := SRID;
+    Query.ExecSQL;
+  finally
+    Query.Free;
+  end;
+end;
+
 Function TGeopackageWriter.CreateLayerWriter(const LayerName: String;
                                              const SRID: Integer;
                                              const PropNames: TArray<String>): TGeopackageLayerWriter;
@@ -810,9 +843,9 @@ var
   SQL: String;
 begin
   // Feature table
-  SQL := 'CREATE TABLE IF NOT EXISTS ' + LayerName +
+  SQL := 'CREATE TABLE IF NOT EXISTS ' + QuotedIdentifier(LayerName) +
          ' (fid INTEGER PRIMARY KEY AUTOINCREMENT, geom BLOB';
-  for var Idx := 0 to High(PropNames) do SQL := SQL + ', ' + PropNames[Idx] + ' TEXT';
+  for var Idx := 0 to High(PropNames) do SQL := SQL + ', ' + QuotedIdentifier(PropNames[Idx]) + ' TEXT';
   SQL := SQL + ')';
   ExecSQL(SQL);
 
@@ -821,16 +854,7 @@ begin
   InsertSRS(SRID, 'EPSG:' + IntToStr(SRID), 'EPSG', 'undefined');
 
   // Register metadata
-  ExecSQL(
-    'INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, srs_id)' +
-    ' VALUES (''' + LayerName + ''', ''features'', ''' + LayerName + ''', ' +
-    IntToStr(SRID) + ')');
-
-  ExecSQL(
-    'INSERT OR IGNORE INTO gpkg_geometry_columns ' +
-    '(table_name, column_name, geometry_type_name, srs_id, z, m)' +
-    ' VALUES (''' + LayerName + ''', ''geom'', ''GEOMETRY'', ' +
-    IntToStr(SRID) + ', 0, 0)');
+  RegisterLayer(LayerName,SRID);
 
   Result := TGeopackageLayerWriter.Create(FConnection,LayerName,SRID,PropNames);
 end;
