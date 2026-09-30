@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  Classes, SysUtils, Math, Types, Variants, Actions, Winapi.Windows,
+  Classes, SysUtils, Math, Types, UITypes, Variants, Actions, Winapi.Windows,
   Winapi.Messages, Winapi.ShellAPI, Winapi.CommCtrl, Vcl.Graphics, Vcl.Controls, Vcl.Forms,
   Vcl.Dialogs, Vcl.ActnList, Vcl.StdActns, Vcl.ComCtrls, Vcl.StdCtrls, PngImage,
   Vcl.Samples.Spin,
@@ -21,11 +21,16 @@ uses
   GISCoordSystem, GISFileFormat, RndrCtrl, RndrCtrl.Default,
   FireDAC.Comp.UI, FireDAC.VCLUI.Wait,
   GIS, GIS.Shapes, GIS.Render.Shapes, GIS.Render.Canvas, GIS.Render.Canvas.VCL,
-  GIS.Render.PixelConv, GIS.Render.PixelConv.Mercator, GIS.Render.Tiles.OSM,
-  GIS.CoordConv, GIS.CoordConv.WGS84;
+  GIS.Render.PixelConv, GIS.Render.PixelConv.Cartesian, GIS.Render.PixelConv.Mercator,
+  GIS.Render.Tiles.OSM, GIS.CoordConv, GIS.CoordConv.WGS84;
 
 type
   TZoomStyle = (zsNone,zsMove,zsZoomIn,zsZoomOut);
+
+  // mpCartesian draws the coordinates of the layers as they are, which fits a
+  // view to the paint area exactly. It takes visible layers that share a
+  // coordinate system and shows no tiles.
+  TMapProjection = (mpWebMercator,mpCartesian);
 
   TMainForm = class(TForm)
     ActionList: TActionList;
@@ -71,7 +76,9 @@ type
     SaveLayerToolButton: TToolButton;
     SaveLayersToolButton: TToolButton;
     SaveLayersSeparator: TToolButton;
-    BackgroundPanel: TPanel;
+    MapPanel: TPanel;
+    ProjectionLabel: TLabel;
+    ProjectionComboBox: TComboBox;
     BackgroundLabel: TLabel;
     BackgroundColorPanel: TPanel;
     PreviousView: TAction;
@@ -95,7 +102,6 @@ type
     Procedure PaintBoxPaint(Sender: TObject);
     Procedure FormClose(Sender: TObject; var Action: TCloseAction);
     Procedure LayerListBoxClick(Sender: TObject);
-    Procedure RemoveLayerBtnClick(Sender: TObject);
     Procedure CollapseBtnClick(Sender: TObject);
     Procedure CoordSystemComboBoxChange(Sender: TObject);
     Procedure RemoveLayerExecute(Sender: TObject);
@@ -107,10 +113,12 @@ type
     Procedure BackgroundColorPanelClick(Sender: TObject);
     Procedure PreviousViewExecute(Sender: TObject);
     Procedure NextViewExecute(Sender: TObject);
+    Procedure ProjectionComboBoxChange(Sender: TObject);
   private
     Const
       crZoomIn  = 1;
       crZoomOut = 2;
+      ProjectionNames: array[TMapProjection] of String = ('Web Mercator','Cartesian');
     Var
       ZoomStyle: TZoomStyle;
       ShapesImage: TBitmap;
@@ -119,6 +127,12 @@ type
       MouseCoordinate: TCoordinate;
       MouseDown: Boolean;
       MercatorConverter: TWebMercatorPixelConverter;
+      CartesianConverter: TCartesianPixelConverter;
+      // The coordinate system of the Cartesian view (owned by
+      // CoordinateSystems) and its converter
+      CartesianCoordSystem: TGISCoordinateSystem;
+      CartesianCoordConverter: TCoordinateConverter;
+      Projection: TMapProjection;
       OSMLayer: TOpenStreetMapLayer;
       Layers: TObjectList<TLayer>;
       ViewportChanged: Boolean;
@@ -130,12 +144,16 @@ type
       CoordinateSystems: TArray<TGISCoordinateSystem>;
     Function  CreateDisabledImages(const Images: TImageList): TImageList;
     Function  ActiveConverter: TCustomPixelConverter;
+    Function  PixelToGeodeticCoord(const Pixel: TPointF): TGeodeticCoordinate;
+    Function  CommonCoordSystem(out CoordSystem: TGISCoordinateSystem): Boolean;
     Function  WorldBBox: TCoordinateRect;
     Function  AllLayersBBox: TCoordinateRect;
+    Function  CartesianLayersBBox: TCoordinateRect;
+    Procedure SetProjection(NewProjection: TMapProjection; const KeepView: Boolean = true);
     Procedure UpdateSelectedLayerPanel;
     Procedure UpdateMinHeight;
     Procedure LayerPropertyChanged(Sender: TObject);
-    Procedure MercatorConverterChanged(Sender: TObject);
+    Procedure ConverterChanged(Sender: TObject);
     Procedure OpenShapeFile(const FileName: String);
   public
     Procedure AddGISLayer(const ALayer: TLayer);
@@ -225,7 +243,30 @@ end;
 
 Function TMainForm.ActiveConverter: TCustomPixelConverter;
 begin
-  Result := MercatorConverter;
+  if Projection = mpCartesian then
+    Result := CartesianConverter
+  else
+    Result := MercatorConverter;
+end;
+
+Function TMainForm.PixelToGeodeticCoord(const Pixel: TPointF): TGeodeticCoordinate;
+begin
+  if Projection = mpCartesian then
+    Result := CartesianCoordConverter.CoordToGeodeticCoord(CartesianConverter.PixelToCoord(Pixel))
+  else
+    Result := MercatorConverter.PixelToGeodeticCoord(Pixel);
+end;
+
+Function TMainForm.CommonCoordSystem(out CoordSystem: TGISCoordinateSystem): Boolean;
+// Whether the visible layers share a coordinate system, and that coordinate
+// system. It is nil where no layer is visible.
+begin
+  Result := true;
+  CoordSystem := nil;
+  for var Layer in Layers do
+    if Layer.Visible then
+      if CoordSystem = nil then CoordSystem := Layer.CoordSystem else
+      if Layer.CoordSystem <> CoordSystem then Exit(false);
 end;
 
 Function TMainForm.WorldBBox: TCoordinateRect;
@@ -250,6 +291,136 @@ begin
       end;
     end;
   if Result.Empty then Result := WorldBBox;
+end;
+
+Function TMainForm.CartesianLayersBBox: TCoordinateRect;
+begin
+  Result.Clear;
+  for var Layer in Layers do
+    if Layer.Visible then Result.Enclose(Layer.Shapes.BoundingBox);
+  if Result.Empty then
+  begin
+    Result.Left := 0; Result.Right := 1; Result.Bottom := 0; Result.Top := 1;
+  end;
+  // A single point or a horizontal or vertical line has no area to fit the
+  // paint area to
+  var Padding := 0.5*Max(Result.Width,Result.Height);
+  if Padding = 0 then Padding := 0.5;
+  if Result.Width = 0 then
+  begin
+    Result.Left  := Result.Left - Padding;
+    Result.Right := Result.Right + Padding;
+  end;
+  if Result.Height = 0 then
+  begin
+    Result.Bottom := Result.Bottom - Padding;
+    Result.Top    := Result.Top + Padding;
+  end;
+end;
+
+Procedure TMainForm.SetProjection(NewProjection: TMapProjection; const KeepView: Boolean = true);
+// Puts the projection into effect and carries the view over to it. Without
+// KeepView the caller sets a view of its own. Passing the projection in
+// effect checks it against the visible layers.
+var
+  CoordSystem: TGISCoordinateSystem;
+  Corners: TArray<TGeodeticCoordinate>;
+  Viewport,Pixels: TCoordinateRect;
+begin
+  // Cartesian draws the coordinates of the visible layers as they are, so
+  // these must share a coordinate system. It stays the one last drawn in for
+  // as long as no layer is visible.
+  var Refused := false;
+  CoordSystem := nil;
+  if NewProjection = mpCartesian then
+    if CommonCoordSystem(CoordSystem) then
+    begin
+      if CoordSystem = nil then CoordSystem := CartesianCoordSystem;
+      if CoordSystem = nil then CoordSystem := CoordinateSystems[0];
+    end else
+    begin
+      NewProjection := mpWebMercator;
+      Refused := true;
+    end;
+  ProjectionComboBox.ItemIndex := Ord(NewProjection);
+  // Tiles are laid out in Web Mercator
+  if (NewProjection = mpCartesian) and ShowOSM.Checked then
+  begin
+    ShowOSM.Checked := false;
+    OSMAttribLabel.Visible := false;
+    LayoutChanged := true;
+    PaintBox.Invalidate;
+  end;
+  if (NewProjection <> Projection) or
+     ((NewProjection = mpCartesian) and (CoordSystem <> CartesianCoordSystem)) then
+  begin
+    // The corners of the view, taken before the projection changes
+    var ViewWidth  := ActiveConverter.PixelWidth;
+    var ViewHeight := ActiveConverter.PixelHeight;
+    if KeepView and ActiveConverter.Initialized then
+      Corners := [PixelToGeodeticCoord(TPointF.Create(0,0)),
+                  PixelToGeodeticCoord(TPointF.Create(ViewWidth,0)),
+                  PixelToGeodeticCoord(TPointF.Create(ViewWidth,ViewHeight)),
+                  PixelToGeodeticCoord(TPointF.Create(0,ViewHeight))];
+    Projection := NewProjection;
+    // The view history holds views of a single projection
+    ActiveConverter.Clear;
+    if Projection = mpCartesian then
+    begin
+      CartesianCoordSystem := CoordSystem;
+      FreeAndNil(CartesianCoordConverter);
+      CartesianCoordConverter := CoordSystem.CreateConverter;
+    end;
+    if Length(Corners) > 0 then
+    begin
+      Viewport.Clear;
+      if Projection = mpCartesian then
+      begin
+        for var Corner in Corners do
+          Viewport.Enclose(CartesianCoordConverter.GeodeticCoordToCoord(Corner));
+        CartesianConverter.Initialize(Viewport,ViewWidth,ViewHeight);
+      end else
+      begin
+        // Web Mercator reaches neither pole
+        for var Corner in Corners do
+          Viewport.Enclose(TCoordinate.Create(EnsureRange(Corner.Longitude,-180,180),
+                                              EnsureRange(Corner.Latitude,-85,85)));
+        MercatorConverter.Initialize(Viewport,ViewWidth,ViewHeight);
+        // Web Mercator zooms in whole levels, and Initialize takes a level
+        // that holds the viewport. Zoom in to the level nearest to the scale
+        // of the view, so that switching back and forth does not zoom out.
+        Pixels.Clear;
+        for var Corner in [TCoordinate.Create(Viewport.Left,Viewport.Top),
+                           TCoordinate.Create(Viewport.Right,Viewport.Bottom)] do
+        begin
+          var Pixel := MercatorConverter.CoordToPixel(Corner);
+          Pixels.Enclose(TCoordinate.Create(Pixel.X,Pixel.Y));
+        end;
+        var Fill := Max(Pixels.Width/ViewWidth,Pixels.Height/ViewHeight);
+        while (Fill < Sqrt(0.5)) and
+              (MercatorConverter.ZoomLevel < MercatorConverter.MaxZoomLevel) do
+        begin
+          MercatorConverter.ZoomIn(TPointF.Create(ViewWidth/2,ViewHeight/2));
+          Fill := 2*Fill;
+        end;
+        // Start the view history at the view arrived at
+        MercatorConverter.Clear;
+        var State := MercatorConverter.GetState;
+        try
+          MercatorConverter.SetState(State);
+        finally
+          State.Free;
+        end;
+      end;
+    end;
+    ConverterChanged(nil);
+    LayoutChanged   := true;
+    ViewportChanged := true;
+    PaintBox.Invalidate;
+  end;
+  if Refused then
+    MessageDlg('The Cartesian projection takes layers that share a coordinate '+
+               'system. The map is drawn in Web Mercator.',mtInformation,[mbOK],0);
 end;
 
 Procedure TMainForm.CoordSystemComboBoxChange(Sender: TObject);
@@ -289,11 +460,11 @@ begin
       Ctrl.Parent                := SelectedLayerPanel;
       Ctrl.Align                 := alClient;
       // Give the control the height it needs; the list box above gets what is
-      // left, and scrolls. Keep the bottom edge above BackgroundPanel:
+      // left, and scrolls. Keep the bottom edge above MapPanel:
       // bottom-aligned panels are stacked by their bottom edge.
       var PanelHeight := Ctrl.RequiredHeight +
                          SelectedLayerPanel.Height - SelectedLayerPanel.ClientHeight;
-      SelectedLayerPanel.SetBounds(0,BackgroundPanel.Top-PanelHeight,
+      SelectedLayerPanel.SetBounds(0,MapPanel.Top-PanelHeight,
                                    SelectedLayerPanel.Width,PanelHeight);
       UpdateMinHeight;
     end;
@@ -311,12 +482,13 @@ Const
 begin
   Constraints.MinHeight := (Height - ClientHeight) + CoordPanel.Height +
                            LayersToolBar.Height + SelectedLayerPanel.Height +
-                           BackgroundPanel.Height +
+                           MapPanel.Height +
                            (MinLayerRows+1)*LayerListBox.ItemHeight;
 end;
 
 Procedure TMainForm.LayerPropertyChanged(Sender: TObject);
 begin
+  SetProjection(Projection);  // the layer may have been shown or hidden
   ViewportChanged := true;
   PaintBox.Invalidate;
 end;
@@ -331,15 +503,16 @@ begin
   UpdateSelectedLayerPanel;
   if LayerPanel.Width <= CollapseBtn.Width then
     CollapseBtnClick(nil);
+  SetProjection(Projection,false);
   ZoomAllExecute(nil);
 end;
 
-Procedure TMainForm.MercatorConverterChanged(Sender: TObject);
+Procedure TMainForm.ConverterChanged(Sender: TObject);
 begin
   for var Layer in Layers do
     Layer.Converter.SyncFrom(MercatorConverter);
-  PreviousView.Enabled := MercatorConverter.PreviousAvail;
-  NextView.Enabled     := MercatorConverter.NextAvail;
+  PreviousView.Enabled := ActiveConverter.PreviousAvail;
+  NextView.Enabled     := ActiveConverter.NextAvail;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -421,9 +594,15 @@ begin
   for var CS in CoordinateSystems do
     CoordSystemComboBox.Items.Add(CS.Name);
   CoordSystemComboBox.ItemIndex := 0;
+  // Populate projection combo box
+  for var MapProjection := Low(TMapProjection) to High(TMapProjection) do
+    ProjectionComboBox.Items.Add(ProjectionNames[MapProjection]);
+  ProjectionComboBox.ItemIndex := Ord(Projection);
   // Primary converter (always WGS84 for the Mercator view)
   MercatorConverter := TWebMercatorPixelConverter.Create(TWgs84CoordinateConverter.Create);
-  MercatorConverter.OnChange := MercatorConverterChanged;
+  CartesianConverter := TCartesianPixelConverter.Create;
+  MercatorConverter.OnChange := ConverterChanged;
+  CartesianConverter.OnChange := ConverterChanged;
   DisplayCoordConverter := CoordinateSystems[0].CreateConverter;
   ShowOSMExecute(nil);
 end;
@@ -445,6 +624,8 @@ begin
   ShapesImage.Free;
   LayerImage.Free;
   MercatorConverter.Free;
+  CartesianConverter.Free;
+  CartesianCoordConverter.Free;
   OSMLayer.Free;
   Layers.Free;  // free layers before coord systems (layers hold CoordSystem refs)
   DisplayCoordConverter.Free;
@@ -473,6 +654,7 @@ begin
     if LayerListBox.Count > 0 then
       LayerListBox.ItemIndex := Min(Idx,LayerListBox.Count-1);
       UpdateSelectedLayerPanel;
+    SetProjection(Projection);
     LayoutChanged := true;
     PaintBox.Refresh;
   end;
@@ -621,10 +803,6 @@ begin
   end;
 end;
 
-Procedure TMainForm.RemoveLayerBtnClick(Sender: TObject);
-begin
-end;
-
 Procedure TMainForm.BackgroundColorPanelClick(Sender: TObject);
 var
   Dlg: TColorDialog;
@@ -703,7 +881,10 @@ begin
     BBox := WorldBBox;
   if MercatorConverter <> nil then
   begin
-    MercatorConverter.Initialize(BBox,PaintBox.ClientWidth,PaintBox.ClientHeight);
+    if Projection = mpCartesian then
+      CartesianConverter.Initialize(CartesianLayersBBox,PaintBox.ClientWidth,PaintBox.ClientHeight)
+    else
+      MercatorConverter.Initialize(BBox,PaintBox.ClientWidth,PaintBox.ClientHeight);
     LayoutChanged := true;
     if Layers.Count > 0 then ViewportChanged := true;
   end;
@@ -713,7 +894,7 @@ end;
 Procedure TMainForm.PreviousViewExecute(Sender: TObject);
 begin
   MouseDown := false;
-  if MercatorConverter.Previous then  // OnChange syncs the layers
+  if ActiveConverter.Previous then  // OnChange syncs the layers
   begin
     LayoutChanged   := true;
     ViewportChanged := true;
@@ -724,7 +905,7 @@ end;
 Procedure TMainForm.NextViewExecute(Sender: TObject);
 begin
   MouseDown := false;
-  if MercatorConverter.Next then  // OnChange syncs the layers
+  if ActiveConverter.Next then  // OnChange syncs the layers
   begin
     LayoutChanged   := true;
     ViewportChanged := true;
@@ -737,8 +918,15 @@ begin
   MouseDown := false;
   ShowOSM.Checked := not ShowOSM.Checked;
   OSMAttribLabel.Visible := ShowOSM.Checked;
+  if ShowOSM.Checked then SetProjection(mpWebMercator);  // tiles are laid out in Web Mercator
   LayoutChanged := true;
   PaintBox.Invalidate;
+end;
+
+Procedure TMainForm.ProjectionComboBoxChange(Sender: TObject);
+begin
+  MouseDown := false;
+  SetProjection(TMapProjection(ProjectionComboBox.ItemIndex));
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -765,11 +953,11 @@ begin
   end;
   // Update coordinate panels
   MousePosition := Point(X,Y);
-  if MercatorConverter.Initialized and
+  if ActiveConverter.Initialized and
      (X >= 0) and (X < PaintBox.ClientWidth) and
      (Y >= 0) and (Y < PaintBox.ClientHeight) then
   begin
-    var Geodetic := MercatorConverter.PixelToGeodeticCoord(TPointF.Create(MousePosition.X,MousePosition.Y));
+    var Geodetic := PixelToGeodeticCoord(TPointF.Create(MousePosition.X,MousePosition.Y));
     MouseCoordinate := DisplayCoordConverter.GeodeticCoordToCoord(Geodetic);
     XCoordPanel.Caption := MouseCoordinate.X.ToString(4,false,false);
     YCoordPanel.Caption := MouseCoordinate.Y.ToString(4,false,false);
@@ -794,23 +982,23 @@ begin
     MouseDown := false;
     case ZoomStyle of
       zsMove:
-        MercatorConverter.PanMap(MousePosition.X-StartPosition.X,MousePosition.Y-StartPosition.Y);
+        ActiveConverter.PanMap(MousePosition.X-StartPosition.X,MousePosition.Y-StartPosition.Y);
       zsZoomIn:
         if (MousePosition.X=StartPosition.X) and (MousePosition.Y=StartPosition.Y) then
-          MercatorConverter.ZoomIn(MousePosition)
+          ActiveConverter.ZoomIn(MousePosition)
         else
           begin
             var Left   := Min(StartPosition.X,MousePosition.X);
             var Top    := Min(StartPosition.Y,MousePosition.Y);
             var Right  := Max(StartPosition.X,MousePosition.X);
             var Bottom := Max(StartPosition.Y,MousePosition.Y);
-            MercatorConverter.ZoomIn(TRectF.Create(Left,Top,Right,Bottom));
+            ActiveConverter.ZoomIn(TRectF.Create(Left,Top,Right,Bottom));
           end;
       zsZoomOut:
         begin
           var CenterX := Round((StartPosition.X+MousePosition.X)/2);
           var CenterY := Round((StartPosition.Y+MousePosition.Y)/2);
-          MercatorConverter.ZoomOut(TPointF.Create(CenterX,CenterY));
+          ActiveConverter.ZoomOut(TPointF.Create(CenterX,CenterY));
         end;
     end;
     if Layers.Count > 0 then ViewportChanged := true;
@@ -841,12 +1029,15 @@ begin
       var NewH := PaintBox.ClientHeight;
       if (NewW <> ShapesImage.Width) or (NewH <> ShapesImage.Height) then
       begin
-        if MercatorConverter.Initialized then
+        if ActiveConverter.Initialized then
         begin
           // Keeps the centre of the view and, not being a change of view,
           // leaves the view history and OnChange alone
-          MercatorConverter.Resize(NewW, NewH);
-          MercatorConverterChanged(nil);
+          if Projection = mpCartesian then
+            CartesianConverter.Resize(NewW, NewH)
+          else
+            MercatorConverter.Resize(NewW, NewH);
+          ConverterChanged(nil);
         end;
         ViewportChanged := true;
         LayoutChanged     := true;
@@ -877,7 +1068,10 @@ begin
               LayerStyle.Text.Size  := Layer.TextSize*CurrentPPI/72;
               LayerStyle.Text.Color := AlphaColor(Layer.TextColor);
               Layer.Shapes.Style := LayerStyle;
-              Layer.Shapes.DrawLayer(GISCanvas(LayerImage),Layer.Converter);
+              if Projection = mpCartesian then
+                Layer.Shapes.DrawLayer(GISCanvas(LayerImage),CartesianConverter)
+              else
+                Layer.Shapes.DrawLayer(GISCanvas(LayerImage),Layer.Converter);
               ShapesImage.Canvas.Draw(0,0,LayerImage,Layer.Opacity);
             end;
         finally
