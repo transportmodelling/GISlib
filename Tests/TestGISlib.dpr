@@ -36,6 +36,7 @@ uses
   {$ENDIF}
   Test.Render.SVG in 'Test.Render.SVG.pas',
   Test.PolyLabel  in 'Test.PolyLabel.pas',
+  Test.Render.Shapes in 'Test.Render.Shapes.pas',
   Test.Polygon    in 'Test.Polygon.pas';
 
 begin

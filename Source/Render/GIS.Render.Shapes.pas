@@ -86,6 +86,8 @@ Type
           LabelPositions: array of TLabelPosition;
         Function Ring(const Part: TShapePart;
                       const PixelConverter: TCustomPixelConverter): TArray<TPointF>;
+        // The label position of an outer ring, calculated the first time it is asked for
+        Function LabelPosition(const Outer: Integer): TCoordinate;
       public
         PolyPolygons: TPolyPolygons;
         ShapeBoundingBox: TCoordinateRect;
@@ -273,21 +275,12 @@ begin
 end;
 
 Procedure TCustomShapesLayer.TPolyPolygonsRenderer.WriteLabelPositions(const Writer: TBinaryWriter);
-Var
-  LabelPosition: TCoordinate;
 begin
   for var Outer := 0 to PolyPolygons.Count-1 do
   begin
-    // Calculate label positions
-    if not LabelPositions[Outer].Calculated then
-    begin
-      LabelPosition := TPolyLabel.PolyLabel(PolyPolygons[Outer],MaxPolyLabelIter);
-      LabelPositions[Outer].Calculated := true;
-      LabelPositions[Outer].Position := LabelPosition;
-    end;
-    // Write label position to file
-    Writer.Write(LabelPosition.X);
-    Writer.Write(LabelPosition.Y);
+    var Position := LabelPosition(Outer);
+    Writer.Write(Position.X);
+    Writer.Write(Position.Y);
   end;
 end;
 
@@ -309,13 +302,22 @@ begin
   Result[Point] := PixelConverter.CoordToPixel(Part[Point]);
 end;
 
+Function TCustomShapesLayer.TPolyPolygonsRenderer.LabelPosition(const Outer: Integer): TCoordinate;
+begin
+  if not LabelPositions[Outer].Calculated then
+  begin
+    LabelPositions[Outer].Position := TPolyLabel.PolyLabel(PolyPolygons[Outer],MaxPolyLabelIter);
+    LabelPositions[Outer].Calculated := true;
+  end;
+  Result := LabelPositions[Outer].Position;
+end;
+
 Procedure TCustomShapesLayer.TPolyPolygonsRenderer.Draw(const Outer: Integer;
                                                         const ShapeLabel: String;
                                                         const Canvas: IGISCanvas;
                                                         const Style: TGISShapeStyle;
                                                         const PixelConverter: TCustomPixelConverter);
 Var
-  LabelPosition: TCoordinate;
   Holes: TArray<TArray<TPointF>>;
 begin
   var PolyPolygon := PolyPolygons[Outer];
@@ -343,15 +345,7 @@ begin
       if (PixelBoundingBox.Width > 1.75*LabelSize.cx)
       and (PixelBoundingBox.Height > 1.75*LabelSize.cy) then
       begin
-        if LabelPositions[Outer].Calculated then
-          LabelPosition := LabelPositions[Outer].Position
-        else
-          begin
-            LabelPosition := TPolyLabel.PolyLabel(PolyPolygon,MaxPolyLabelIter);
-            LabelPositions[Outer].Calculated := true;
-            LabelPositions[Outer].Position := LabelPosition;
-          end;
-        var LabelPixel := PixelConverter.CoordToPixel(LabelPosition);
+        var LabelPixel := PixelConverter.CoordToPixel(LabelPosition(Outer));
         Canvas.DrawText(LabelPixel.X,LabelPixel.Y,ShapeLabel,Style.Text,gahCenter,gavMiddle);
       end;
     end;

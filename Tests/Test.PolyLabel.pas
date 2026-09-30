@@ -5,8 +5,7 @@ unit Test.PolyLabel;
 // Author: Jaap Baak
 // https://github.com/transportmodelling/GISlib
 //
-// Tests for TPolyLabel.PolyLabel from GIS.Shapes.Polygon.PolyLabel - no
-// external data files required.
+// Tests for TPolyLabel.PolyLabel from GIS.Shapes.Polygon.PolyLabel - no external data files required.
 //
 ////////////////////////////////////////////////////////////////////////////////
 

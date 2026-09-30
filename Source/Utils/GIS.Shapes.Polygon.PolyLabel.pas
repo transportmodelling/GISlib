@@ -39,8 +39,7 @@ Type
     Constructor Create(const Center: TCoordinate; const Size: Float64);
     Procedure SetDistance(const [ref] PolyPolygon: TPolyPolygon);
     Function SetPotential: Float64;
-    // One of the four cells of half the size this cell divides into, the
-    // signs telling which quadrant
+    // One of the four cells of half the size this cell divides into, the signs telling which quadrant
     Function SubCell(const SignX,SignY: Integer): TPolyLabelCell;
   end;
 
@@ -54,8 +53,7 @@ Type
     // cell there, and to the back otherwise
     Procedure Push(const Cell: TPolyLabelCell);
     Function Pop: TPolyLabelCell;
-    // Keeps a subcell that could still improve on the best position; frees
-    // one that cannot
+    // Keeps a subcell that could still improve on the best position; frees one that cannot
     Procedure Consider(const SubCell: TPolyLabelCell; const [ref] PolyPolygon: TPolyPolygon);
     Destructor Destroy; override;
   end;
