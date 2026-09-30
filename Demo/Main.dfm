@@ -44,7 +44,6 @@ object MainForm: TMainForm
     Align = alLeft
     BevelOuter = bvNone
     TabOrder = 1
-    ExplicitHeight = 795
     object CollapseBtn: TButton
       Left = 202
       Top = 0
@@ -54,7 +53,6 @@ object MainForm: TMainForm
       Caption = '<'
       TabOrder = 0
       OnClick = CollapseBtnClick
-      ExplicitHeight = 795
     end
     object CollapsiblePanel: TPanel
       Left = 0
@@ -64,7 +62,6 @@ object MainForm: TMainForm
       Align = alClient
       BevelOuter = bvNone
       TabOrder = 1
-      ExplicitHeight = 795
       object SelectedLayerPanel: TPanel
         Left = 0
         Top = 441
@@ -73,7 +70,6 @@ object MainForm: TMainForm
         Align = alBottom
         Enabled = False
         TabOrder = 0
-        ExplicitTop = 395
       end
       object MapPanel: TPanel
         Left = 0
@@ -83,7 +79,6 @@ object MainForm: TMainForm
         Align = alBottom
         BevelOuter = bvNone
         TabOrder = 3
-        ExplicitTop = 734
         object ProjectionLabel: TLabel
           Left = 8
           Top = 10
@@ -137,7 +132,6 @@ object MainForm: TMainForm
         ItemHeight = 13
         TabOrder = 1
         OnClick = LayerListBoxClick
-        ExplicitHeight = 366
       end
       object LayersToolBar: TToolBar
         Left = 0
@@ -200,8 +194,6 @@ object MainForm: TMainForm
     ParentBackground = False
     TabOrder = 0
     StyleElements = [seFont, seBorder]
-    ExplicitTop = 795
-    ExplicitWidth = 1296
     object OSMAttribLabel: TLabel
       Left = 4
       Top = 3
@@ -222,7 +214,6 @@ object MainForm: TMainForm
       ParentBackground = False
       TabOrder = 0
       StyleElements = [seFont, seBorder]
-      ExplicitLeft = 1171
     end
     object XCoordPanel: TPanel
       Left = 1112
@@ -236,7 +227,6 @@ object MainForm: TMainForm
       ParentBackground = False
       TabOrder = 1
       StyleElements = [seFont, seBorder]
-      ExplicitLeft = 1046
     end
     object CoordSystemComboBox: TComboBox
       AlignWithMargins = True
@@ -253,7 +243,6 @@ object MainForm: TMainForm
       TabOrder = 2
       TabStop = False
       OnChange = CoordSystemComboBoxChange
-      ExplicitLeft = 855
     end
   end
   object GISPanel: TPanel
@@ -264,8 +253,6 @@ object MainForm: TMainForm
     Align = alClient
     BevelOuter = bvNone
     TabOrder = 2
-    ExplicitWidth = 1080
-    ExplicitHeight = 795
     object PaintBox: TPaintBox
       Left = 0
       Top = 30
@@ -293,7 +280,6 @@ object MainForm: TMainForm
       Caption = 'GISToolBar'
       Images = ImageList
       TabOrder = 0
-      ExplicitWidth = 1080
       object ShowOSMToolButton: TToolButton
         Left = 0
         Top = 0
@@ -352,6 +338,7 @@ object MainForm: TMainForm
   end
   object ActionList: TActionList
     Images = ImageList
+    OnUpdate = ActionListUpdate
     Left = 1008
     Top = 568
     object RemoveLayer: TAction

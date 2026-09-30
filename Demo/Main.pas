@@ -114,6 +114,7 @@ type
     Procedure PreviousViewExecute(Sender: TObject);
     Procedure NextViewExecute(Sender: TObject);
     Procedure ProjectionComboBoxChange(Sender: TObject);
+    Procedure ActionListUpdate(Action: TBasicAction; var Handled: Boolean);
   private
     Const
       crZoomIn  = 1;
@@ -144,6 +145,7 @@ type
       CoordinateSystems: TArray<TGISCoordinateSystem>;
     Function  CreateDisabledImages(const Images: TImageList): TImageList;
     Function  ActiveConverter: TCustomPixelConverter;
+    Function  MapShown: Boolean;
     Function  PixelToGeodeticCoord(const Pixel: TPointF): TGeodeticCoordinate;
     Function  CommonCoordSystem(out CoordSystem: TGISCoordinateSystem): Boolean;
     Function  WorldBBox: TCoordinateRect;
@@ -249,6 +251,20 @@ begin
     Result := CartesianConverter
   else
     Result := MercatorConverter;
+end;
+
+Function TMainForm.MapShown: Boolean;
+// Returns whether there is anything to look at: the tiles or a visible layer.
+// Without it there is no view to zoom, pan or save.
+begin
+  if ShowOSM.Checked then
+    Result := true
+  else
+    begin
+      Result := false;
+      for var Layer in Layers do
+      if Layer.Visible then Exit(true);
+    end;
 end;
 
 Function TMainForm.PixelToGeodeticCoord(const Pixel: TPointF): TGeodeticCoordinate;
@@ -513,8 +529,6 @@ Procedure TMainForm.ConverterChanged(Sender: TObject);
 begin
   for var Layer in Layers do
     Layer.Converter.SyncFrom(MercatorConverter);
-  PreviousView.Enabled := ActiveConverter.PreviousAvail;
-  NextView.Enabled     := ActiveConverter.NextAvail;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -623,6 +637,7 @@ end;
 
 Procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
+  ActionList.OnUpdate := nil;  // it looks at what is freed here
   ShapesImage.Free;
   LayerImage.Free;
   MercatorConverter.Free;
@@ -981,6 +996,28 @@ begin
   SetProjection(TMapProjection(ProjectionComboBox.ItemIndex));
 end;
 
+Procedure TMainForm.ActionListUpdate(Action: TBasicAction; var Handled: Boolean);
+// The layer actions need a layer to act on, and the view actions a map. A tool
+// stays checked while it is disabled, so it is back in effect once there is a
+// map again.
+begin
+  var Selected := LayerListBox.ItemIndex;
+  var HasSelection := (Selected >= 0) and (Selected < Layers.Count);
+  var Shown := MapShown;
+  RemoveLayer.Enabled  := HasSelection;
+  LayerUp.Enabled      := HasSelection and (Selected > 0);
+  LayerDown.Enabled    := HasSelection and (Selected < Layers.Count-1);
+  SaveLayer.Enabled    := HasSelection;
+  SaveLayers.Enabled   := Layers.Count > 0;
+  ZoomIn.Enabled       := Shown;
+  ZoomOut.Enabled      := Shown;
+  Pan.Enabled          := Shown;
+  ZoomAll.Enabled      := Shown;
+  PreviousView.Enabled := Shown and ActiveConverter.PreviousAvail;
+  NextView.Enabled     := Shown and ActiveConverter.NextAvail;
+  SaveImage.Enabled    := Shown;
+end;
+
 ////////////////////////////////////////////////////////////////////////////////
 // Mouse handlers
 ////////////////////////////////////////////////////////////////////////////////
@@ -988,7 +1025,7 @@ end;
 Procedure TMainForm.PaintBoxMouseDown(Sender: TObject; Button: TMouseButton;
                                       Shift: TShiftState; X, Y: Integer);
 begin
-  MouseDown := true;
+  MouseDown := MapShown;  // a tool left checked has nothing to act on otherwise
   StartPosition := MousePosition;
 end;
 
