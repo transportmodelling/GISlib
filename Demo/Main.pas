@@ -163,6 +163,9 @@ type
     Function  WorldBBox: TCoordinateRect;
     Function  AllLayersBBox: TCoordinateRect;
     Function  CartesianLayersBBox: TCoordinateRect;
+    // The pixels a shape may stick out of its layer's bounding box, so that a view fitted to
+    // the layers keeps the outermost symbols on the map
+    Function  LayersMargin: Single;
     Procedure HideUnknownLayers;
     Procedure SetProjection(NewProjection: TMapProjection; const KeepView: Boolean = true);
     Procedure UpdateSelectedLayerPanel;
@@ -305,6 +308,19 @@ begin
   end;
 end;
 
+Function TMainForm.LayersMargin: Single;
+// Half a point symbol, plus the pen it is drawn with
+begin
+  Result := 0;
+  for var Layer in Layers do
+    if Layer.Visible then
+    begin
+      var Margin: Single := Layer.PenWidth;
+      if Layer.Shapes.ShapeCount(stPoint) > 0 then Margin := Margin + 0.5*Layer.Shapes.PointRenderSize;
+      if Margin > Result then Result := Margin;
+    end;
+end;
+
 Procedure TMainForm.HideUnknownLayers;
 begin
   for var Layer in Layers do
@@ -416,6 +432,8 @@ begin
       begin
         for var Corner in Corners do
           Viewport.Enclose(CartesianCoordConverter.GeodeticCoordToCoord(Corner));
+        // The view is carried over as it is
+        CartesianConverter.Margin := 0;
         CartesianConverter.Initialize(Viewport,ViewWidth,ViewHeight);
       end else
       begin
@@ -423,6 +441,7 @@ begin
         for var Corner in Corners do
           Viewport.Enclose(TCoordinate.Create(EnsureRange(Corner.Longitude,-180,180),
                                               EnsureRange(Corner.Latitude,-85,85)));
+        MercatorConverter.Margin := 0;
         MercatorConverter.Initialize(Viewport,ViewWidth,ViewHeight);
         // Web Mercator zooms in whole levels, and Initialize takes a level
         // that holds the viewport. Zoom in to the level nearest to the scale
@@ -971,6 +990,9 @@ begin
   if MercatorConverter <> nil then
   begin
     // AllLayersBBox converts coordinates, which takes known coordinate systems
+    var Margin := LayersMargin;
+    CartesianConverter.Margin := Margin;
+    MercatorConverter.Margin := Margin;
     if Projection = mpCartesian then
       CartesianConverter.Initialize(CartesianLayersBBox,PaintBox.ClientWidth,PaintBox.ClientHeight)
     else
