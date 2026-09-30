@@ -24,6 +24,7 @@ Type
       FCoordUnitsPerPixel: Float64;
       FViewport: TCoordinateRect;
     Procedure SetMargin(Margin: Float32);
+    Procedure SetViewport(const Center: TCoordinate);
   strict protected
     Procedure WriteState(const Writer: TBinaryWriter); override;
     Procedure ReadState(const Reader: TBinaryReader); override;
@@ -42,6 +43,10 @@ Type
     Procedure ZoomIn(const Pixels: TRectF); overload; override;
     Procedure ZoomOut(const Pixel: TPointF); overload; override;
     Procedure PanMap(const DeltaXPixel,DeltaYPixel: Float32); override;
+    // Update pixel dimensions, keeping the scale and the centre of the view.
+    // The view itself is unchanged, so it is not added to the history and
+    // OnChange does not fire.
+    Procedure Resize(const PixelWidth,PixelHeight: Float32);
     // Get viewport
     Function GetViewport: TCoordinateRect; override;
   public
@@ -63,22 +68,33 @@ begin
   end;
 end;
 
-Procedure TCartesianPixelConverter.WriteState(const Writer: TBinaryWriter);
+Procedure TCartesianPixelConverter.SetViewport(const Center: TCoordinate);
 begin
-  Writer.Write(FViewport.Left);
-  Writer.Write(FViewport.Top);
+  FViewport.Left := Center.X - 0.5*FPixelWidth*FCoordUnitsPerPixel;
+  FViewport.Right := Center.X + 0.5*FPixelWidth*FCoordUnitsPerPixel;
+  FViewport.Top := Center.Y + 0.5*FPixelHeight*FCoordUnitsPerPixel;
+  FViewport.Bottom := Center.Y - 0.5*FPixelHeight*FCoordUnitsPerPixel;
+end;
+
+Procedure TCartesianPixelConverter.WriteState(const Writer: TBinaryWriter);
+// A state holds the centre of the view rather than its top left corner, so
+// that it restores the same view after the pixel dimensions have changed
+begin
+  var Center := FViewport.CenterPoint;
+  Writer.Write(Center.X);
+  Writer.Write(Center.Y);
   Writer.Write(FCoordUnitsPerPixel);
 end;
 
 Procedure TCartesianPixelConverter.ReadState(const Reader: TBinaryReader);
+Var
+  Center: TCoordinate;
 begin
-  FViewport.Left := Reader.ReadDouble;
-  FViewport.Top := Reader.ReadDouble;
+  Center.X := Reader.ReadDouble;
+  Center.Y := Reader.ReadDouble;
   FCoordUnitsPerPixel := Reader.ReadDouble;
-  FViewport.Right := FViewport.Left + PixelWidth*FCoordUnitsPerPixel;
-  FViewport.Bottom := FViewport.Top - PixelHeight*FCoordUnitsPerPixel;
+  SetViewport(Center);
 end;
-
 
 Function TCartesianPixelConverter.CoordToPixel(const Coord: TCoordinate): TPointF;
 begin
@@ -201,6 +217,17 @@ begin
     Changed;
   end else
     raise Exception.Create('Pixel converter not initialized');
+end;
+
+Procedure TCartesianPixelConverter.Resize(const PixelWidth,PixelHeight: Float32);
+begin
+  if FInitialized then
+  begin
+    var Center := FViewport.CenterPoint;
+    FPixelWidth := PixelWidth;
+    FPixelHeight := PixelHeight;
+    SetViewport(Center);
+  end;
 end;
 
 Function TCartesianPixelConverter.GetViewport: TCoordinateRect;

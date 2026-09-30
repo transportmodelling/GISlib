@@ -29,6 +29,13 @@ type
     [Test] Procedure NotInitializedByDefault;
     [Test] Procedure CoordToPixel_PixelToCoord_RoundTrip;
     [Test] Procedure Initialize_CenterMapsToHalfPixelDimensions;
+    // Initialize: the bounding box spans the full height or the full width
+    [Test] Procedure Initialize_WideBoundingBoxSpansPixelWidth;
+    [Test] Procedure Initialize_TallBoundingBoxSpansPixelHeight;
+    // Resize: centre and scale stay fixed
+    [Test] Procedure Resize_PreservesCentreAndScale;
+    [Test] Procedure Resize_IsNotAddedToHistory;
+    [Test] Procedure Previous_AfterResize_RestoresCentre;
   end;
 
   [TestFixture]
@@ -104,6 +111,81 @@ begin
   CentrePx := FConv.CoordToPixel(BB.CenterPoint);
   Assert.AreEqual(400.0, CentrePx.X, 1.0, 'Centre X should be half pixel width');
   Assert.AreEqual(300.0, CentrePx.Y, 1.0, 'Centre Y should be half pixel height');
+end;
+
+Procedure TCartesianPixelConverterTests.Initialize_WideBoundingBoxSpansPixelWidth;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 1000; BB.Right := 5000; BB.Bottom := 200; BB.Top := 1200;
+  FConv.Initialize(BB, 800, 600);
+  var TopLeft := FConv.CoordToPixel(BB.Left,BB.Top);
+  var BottomRight := FConv.CoordToPixel(BB.Right,BB.Bottom);
+  Assert.AreEqual(0.0, TopLeft.X, 1e-3, 'Left edge');
+  Assert.AreEqual(800.0, BottomRight.X, 1e-3, 'Right edge');
+  // Centred over the height, at the scale of the width
+  Assert.AreEqual(200.0, TopLeft.Y, 1e-3, 'Top edge');
+  Assert.AreEqual(400.0, BottomRight.Y, 1e-3, 'Bottom edge');
+end;
+
+Procedure TCartesianPixelConverterTests.Initialize_TallBoundingBoxSpansPixelHeight;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 1000; BB.Right := 2000; BB.Bottom := 200; BB.Top := 3200;
+  FConv.Initialize(BB, 800, 600);
+  var TopLeft := FConv.CoordToPixel(BB.Left,BB.Top);
+  var BottomRight := FConv.CoordToPixel(BB.Right,BB.Bottom);
+  Assert.AreEqual(0.0, TopLeft.Y, 1e-3, 'Top edge');
+  Assert.AreEqual(600.0, BottomRight.Y, 1e-3, 'Bottom edge');
+  // Centred over the width, at the scale of the height
+  Assert.AreEqual(300.0, TopLeft.X, 1e-3, 'Left edge');
+  Assert.AreEqual(500.0, BottomRight.X, 1e-3, 'Right edge');
+end;
+
+Procedure TCartesianPixelConverterTests.Resize_PreservesCentreAndScale;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 0; BB.Right := 100; BB.Bottom := 0; BB.Top := 100;
+  FConv.Initialize(BB, 800, 600);
+  var Scale := FConv.CoordUnitsPerPixel;
+  FConv.Resize(1000, 700);
+  var Centre := FConv.PixelToCoord(TPointF.Create(500, 350));
+  Assert.AreEqual(50.0, Centre.X, 1e-8, 'Centre X');
+  Assert.AreEqual(50.0, Centre.Y, 1e-8, 'Centre Y');
+  Assert.AreEqual(Scale, FConv.CoordUnitsPerPixel, 1e-12, 'Scale');
+  Assert.AreEqual(1000*Scale, FConv.Viewport.Width, 1e-8, 'Viewport width');
+  Assert.AreEqual(700*Scale, FConv.Viewport.Height, 1e-8, 'Viewport height');
+end;
+
+Procedure TCartesianPixelConverterTests.Resize_IsNotAddedToHistory;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 0; BB.Right := 100; BB.Bottom := 0; BB.Top := 100;
+  FConv.Initialize(BB, 800, 600);
+  FConv.PanMap(100, 0);
+  Assert.IsTrue(FConv.Previous, 'Previous');
+  FConv.Resize(1000, 700);
+  // A resize neither adds a view nor drops the view after the current one
+  Assert.IsFalse(FConv.PreviousAvail, 'Resize added no previous view');
+  Assert.IsTrue(FConv.NextAvail, 'Resize kept the next view');
+end;
+
+Procedure TCartesianPixelConverterTests.Previous_AfterResize_RestoresCentre;
+var
+  BB: TCoordinateRect;
+begin
+  BB.Left := 0; BB.Right := 100; BB.Bottom := 0; BB.Top := 100;
+  FConv.Initialize(BB, 800, 600);
+  FConv.PanMap(100, 50);
+  FConv.Resize(1000, 700);
+  Assert.IsTrue(FConv.Previous, 'Previous');
+  // The earlier view comes back centred in the resized window
+  var Centre := FConv.PixelToCoord(TPointF.Create(500, 350));
+  Assert.AreEqual(50.0, Centre.X, 1e-8, 'Centre X after Previous');
+  Assert.AreEqual(50.0, Centre.Y, 1e-8, 'Centre Y after Previous');
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
