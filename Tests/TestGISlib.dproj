@@ -101,6 +101,7 @@
         <DCCReference Include="Test.Polygon.pas"/>
         <DCCReference Include="Test.PolyLabel.pas"/>
         <DCCReference Include="Test.Render.Shapes.pas"/>
+        <DCCReference Include="Test.Render.Network.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

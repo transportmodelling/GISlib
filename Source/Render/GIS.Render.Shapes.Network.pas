@@ -134,17 +134,19 @@ Procedure TNetworkLayer.Clear;
 begin
   FCount := 0;
   FNodesCount := 0;
+  FBoundingBox.Clear;
 end;
 
 Function TNetworkLayer.AddNode(X,Y: Float64): Integer;
 begin
-  AddNode(TCoordinate.Create(X,Y));
+  Result := AddNode(TCoordinate.Create(X,Y));
 end;
 
 Function TNetworkLayer.AddNode(Node: TCoordinate): Integer;
 begin
   EnsureNodesCapacity;
-  FNodes[FNodesCount] := Node;
+  Result := FNodesCount;
+  FNodes[Result] := Node;
   Inc(FNodesCount);
   FBoundingBox.Enclose(Node);
 end;
