@@ -17,7 +17,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.SysUtils, DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
+  System.SysUtils, DUnitX.TestFramework, DBF, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
 
 type
   [TestFixture]
@@ -59,6 +59,23 @@ type
     [Test] Procedure CpgCodePageNumber;
     [Test] Procedure CpgISO8859;
     [Test] Procedure CpgUnknownCodePage_DetectsUTF8;
+  end;
+
+  // The reader on files it cannot read, and on files without properties
+  [TestFixture]
+  TESRIShapeFileReaderFileTests = class
+  private
+    FDir: String;
+    // The base name of a point shapefile with one NAME field written in the temp directory
+    Function PointFile: String;
+  public
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
+    [Test] Procedure InvalidFileCode_Raises;
+    [Test] Procedure UnsupportedShapeType_Raises;
+    [Test] Procedure WithoutProperties_ReadsNone;
+    [Test] Procedure WithoutDbf_ReadsNoProperties;
+    [Test] Procedure IndexOf_MustExist_RaisesForAnUnknownField;
   end;
 
   // GeoJSON is UTF-8 by definition (RFC 7946), with or without a byte order mark
@@ -262,6 +279,100 @@ end;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+Procedure TESRIShapeFileReaderFileTests.Setup;
+begin
+  FDir := TPath.Combine(TPath.GetTempPath, 'GISlibReader' + TGUID.NewGuid.ToString);
+  TDirectory.CreateDirectory(FDir);
+end;
+
+Procedure TESRIShapeFileReaderFileTests.TearDown;
+begin
+  TDirectory.Delete(FDir, true);
+end;
+
+Function TESRIShapeFileReaderFileTests.PointFile: String;
+begin
+  Result := TPath.Combine(FDir, 'Points');
+  var W := TESRIPointShapeFileWriter.Create(Result + '.shp', [TDBFField.Create('NAME', 'C', 10, 0)]);
+  try
+    W.Write(1, 2, ['Amersfoort']);
+  finally
+    W.Free;
+  end;
+end;
+
+Procedure TESRIShapeFileReaderFileTests.InvalidFileCode_Raises;
+begin
+  var FileName := TPath.Combine(FDir, 'Bogus.shp');
+  TFile.WriteAllBytes(FileName, TBytes.Create(0, 0, 0, 0, 0, 0, 0, 0));
+  Assert.WillRaise(Procedure begin TESRIShapeFileReader.Create(FileName).Free end, Exception);
+end;
+
+Procedure TESRIShapeFileReaderFileTests.UnsupportedShapeType_Raises;
+// The shape type of the first record sits at offset 108: after the 100 byte file header
+// and the 8 byte record header. 11 is PointZ, which the reader does not take.
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var Base := PointFile;
+  var Bytes := TFile.ReadAllBytes(Base + '.shp');
+  Bytes[108] := 11;
+  TFile.WriteAllBytes(Base + '.shp', Bytes);
+  var R := TESRIShapeFileReader.Create(Base + '.shp');
+  try
+    Assert.WillRaise(Procedure begin R.ReadShape(Shape, Props) end, Exception);
+  finally
+    R.Free;
+  end;
+end;
+
+Procedure TESRIShapeFileReaderFileTests.WithoutProperties_ReadsNone;
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var R := TESRIShapeFileReader.Create(PointFile + '.shp', false);
+  try
+    Assert.AreEqual(-1, R.IndexOf('NAME'), 'No field is known');
+    Assert.IsTrue(R.ReadShape(Shape, Props));
+    Assert.AreEqual(0, Integer(Length(Props)), 'No properties');
+    Assert.AreEqual(1.0, Shape[0,0].X, 1e-10, 'The shape is still read');
+  finally
+    R.Free;
+  end;
+end;
+
+Procedure TESRIShapeFileReaderFileTests.WithoutDbf_ReadsNoProperties;
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var Base := PointFile;
+  TFile.Delete(Base + '.dbf');
+  var R := TESRIShapeFileReader.Create(Base + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Shape, Props));
+    Assert.AreEqual(0, Integer(Length(Props)), 'No properties');
+  finally
+    R.Free;
+  end;
+end;
+
+Procedure TESRIShapeFileReaderFileTests.IndexOf_MustExist_RaisesForAnUnknownField;
+begin
+  var R := TESRIShapeFileReader.Create(PointFile + '.shp');
+  try
+    Assert.AreEqual(0, R.IndexOf('NAME'));
+    Assert.AreEqual(-1, R.IndexOf('OTHER'));
+    Assert.WillRaise(Procedure begin R.IndexOf('OTHER', true) end, Exception);
+  finally
+    R.Free;
+  end;
+end;
+
+////////////////////////////////////////////////////////////////////////////////
+
 Procedure TGeoJSONReaderEncodingTests.Setup;
 begin
   FDir := TPath.Combine(TPath.GetTempPath, 'GISlibGeoJSON' + TGUID.NewGuid.ToString);
@@ -310,6 +421,7 @@ end;
 initialization
   TDUnitX.RegisterTestFixture(TESRIShapeFileReaderTests);
   TDUnitX.RegisterTestFixture(TESRIShapeFileEncodingTests);
+  TDUnitX.RegisterTestFixture(TESRIShapeFileReaderFileTests);
   TDUnitX.RegisterTestFixture(TGeoJSONReaderEncodingTests);
 
 end.

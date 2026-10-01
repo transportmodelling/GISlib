@@ -16,8 +16,8 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.JSON, System.Generics.Collections, DUnitX.TestFramework,
-  GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
+  System.JSON, System.Generics.Collections, DUnitX.TestFramework, DBF,
+  GIS, GIS.Shapes, GIS.Shapes.Polygon, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
 
 type
   [TestFixture]
@@ -49,6 +49,14 @@ type
     [Test] Procedure WriteMultiplePolygons_CountMatches;
     [Test] Procedure WriteLineString_RoundTrip;
     [Test] Procedure FileHeader_SizeFields_MatchFileSizes;
+    [Test] Procedure WritePoint_RoundTrip;
+    [Test] Procedure WriteMultiPoint_RoundTrip;
+    [Test] Procedure WriteMultiPartPolyLine_RoundTrip;
+    [Test] Procedure WritePolygonWithHole_RoundTrip;
+    [Test] Procedure WritePolygon_UnclosedRing_IsClosed;
+    [Test] Procedure WritePolygon_SinglePoint_Raises;
+    [Test] Procedure WriteWithFields_ReadsTheValuesBack;
+    [Test] Procedure WriteValuesWithoutFields_Raises;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -56,7 +64,7 @@ implementation
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.SysUtils, System.IOUtils;
+  System.SysUtils, System.Variants, System.IOUtils;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -452,6 +460,200 @@ begin
   Assert.AreEqual(154, BigEndianHeaderField(TempBase + '.shp'), 'Shape file size field');
   Assert.AreEqual(Integer(TFile.GetSize(TempBase + '.shx')) div 2,
                   BigEndianHeaderField(TempBase + '.shx'), 'Index file size field');
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WritePoint_RoundTrip;
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFiles;
+  var W := TESRIPointShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write(3, 4, []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(Ord(stPoint), Ord(Read.ShapeType), 'Shape type');
+    Assert.AreEqual(1, Read.Parts[0].Count, 'Point count');
+    Assert.AreEqual(3.0, Read[0,0].X, 1e-10, 'X');
+    Assert.AreEqual(4.0, Read[0,0].Y, 1e-10, 'Y');
+    Assert.IsFalse(R.ReadShape(Read, Props), 'Only one shape expected');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WriteMultiPoint_RoundTrip;
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFiles;
+  var W := TESRIMultiPointShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write([TCoordinate.Create(0, 0), TCoordinate.Create(5, 5), TCoordinate.Create(10, 0)], []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(Ord(stPoint), Ord(Read.ShapeType), 'Shape type');
+    Assert.AreEqual(3, Read.Parts[0].Count, 'Point count');
+    Assert.AreEqual(5.0, Read[0,1].Y, 1e-10, 'Second point Y');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WriteMultiPartPolyLine_RoundTrip;
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+  Parts: TMultiPoints;
+begin
+  DeleteTempFiles;
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(0, 0), TCoordinate.Create(5, 5)];
+  Parts[1] := [TCoordinate.Create(10, 0), TCoordinate.Create(15, 5), TCoordinate.Create(20, 0)];
+  var W := TESRIPolyLineShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write(Parts, []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(Ord(stLine), Ord(Read.ShapeType), 'Shape type');
+    Assert.AreEqual(2, Read.Count, 'Part count');
+    Assert.AreEqual(2, Read.Parts[0].Count, 'Points of the first part');
+    Assert.AreEqual(3, Read.Parts[1].Count, 'Points of the second part');
+    Assert.AreEqual(15.0, Read[1,1].X, 1e-10, 'Second point of the second part');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WritePolygonWithHole_RoundTrip;
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+  Rings: TMultiPoints;
+begin
+  DeleteTempFiles;
+  SetLength(Rings, 2);
+  Rings[0] := [TCoordinate.Create(-5, -5), TCoordinate.Create(5, -5), TCoordinate.Create(5, 5), TCoordinate.Create(-5, 5)];
+  Rings[1] := [TCoordinate.Create(-1, -1), TCoordinate.Create(1, -1), TCoordinate.Create(1, 1), TCoordinate.Create(-1, 1)];
+  var W := TESRIPolygonShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write(Rings, []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(2, Read.Count, 'Ring count');
+    var Polygons := TPolyPolygons.Create(Read);
+    Assert.AreEqual(1, Polygons.Count, 'One outer ring');
+    Assert.AreEqual(1, Polygons[0].HolesCount, 'with one hole');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WritePolygon_UnclosedRing_IsClosed;
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFiles;
+  var W := TESRIPolygonShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write([TCoordinate.Create(0, 0), TCoordinate.Create(10, 0), TCoordinate.Create(10, 10), TCoordinate.Create(0, 10)], []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(5, Read.Parts[0].Count, 'The closing point is added');
+    Assert.AreEqual(Read[0,0].X, Read[0,4].X, 1e-10, 'First and last X');
+    Assert.AreEqual(Read[0,0].Y, Read[0,4].Y, 1e-10, 'First and last Y');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WritePolygon_SinglePoint_Raises;
+begin
+  DeleteTempFiles;
+  var W := TESRIPolygonShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    Assert.WillRaise(Procedure begin W.Write([TCoordinate.Create(0, 0)], []) end, Exception);
+  finally
+    W.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WriteWithFields_ReadsTheValuesBack;
+// One record of every field type, and one of nulls
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFiles;
+  var W := TESRIPointShapeFileWriter.Create(TempBase + '.shp',
+    [TDBFField.Create('NAME', 'C', 10, 0, true),
+     TDBFField.Create('ORDER', 'N', 5, 0),
+     TDBFField.Create('VALUE', 'N', 12, 6, true),
+     TDBFField.Create('FLAG', 'L', 1, 0),
+     TDBFField.Create('WHEN', 'D', 8, 0)]);
+  try
+    W.Write(1, 2, ['Amersfoort', 3, 52.2, True, EncodeDate(2026, 10, 1)]);
+    W.Write(3, 4, [Null, Null, Null, Null, Null]);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.AreEqual(2, R.IndexOf('VALUE'), 'Field index');
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(5, Integer(Length(Props)), 'Field count');
+    Assert.AreEqual('Amersfoort', String(Props.ValueFromName['NAME']));
+    Assert.AreEqual(3, Integer(Props.ValueFromName['ORDER']));
+    Assert.AreEqual(52.2, Double(Props.ValueFromName['VALUE']), 1e-9);
+    Assert.IsTrue(Boolean(Props.ValueFromName['FLAG']), 'Flag');
+    Assert.AreEqual(EncodeDate(2026, 10, 1), TDateTime(Props.ValueFromName['WHEN']), 1e-9);
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    for var Prop in Props do Assert.IsTrue(VarIsNull(Prop.Value), Prop.Key + ' is null');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WriteValuesWithoutFields_Raises;
+begin
+  DeleteTempFiles;
+  var W := TESRIPointShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    Assert.WillRaise(Procedure begin W.Write(1, 2, [3]) end, Exception);
+  finally
+    W.Free;
+  end;
   DeleteTempFiles;
 end;
 
