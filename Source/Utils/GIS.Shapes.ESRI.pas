@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  Classes, SysUtils, IOUtils, Generics.Collections, DBF, GIS, GIS.Shapes;
+  Classes, SysUtils, IOUtils, Generics.Collections, DBF, GIS, GIS.Shapes, GIS.Shapes.Polygon;
 
 Type
   TESRIShapeFileReader = Class(TGISShapesReader)
@@ -75,6 +75,11 @@ Type
   end;
 
   TESRIPolygonShapeFileWriter = Class(TESRIShapeFileWriter)
+  // Outer rings are written clockwise and holes counter-clockwise, each outer ring with its holes
+  // after it, as the format requires, whatever direction and order they are given in
+  private
+    // The points of the ring in the direction asked for
+    Function Oriented(const Ring: TShapePart; const Clockwise: Boolean): TMultiPoint;
   public
     Constructor Create(FileName: string; const Properties: array of TDBFField);
     Procedure Write(Polygon: TMultiPoint; const Properties: array of Variant); overload;
@@ -470,27 +475,59 @@ begin
   inherited Create(FileName,Properties);
 end;
 
+Function TESRIPolygonShapeFileWriter.Oriented(const Ring: TShapePart; const Clockwise: Boolean): TMultiPoint;
+// Twice the signed area of a closed ring is positive when it runs counter-clockwise
+begin
+  Result := Ring.AsMultiPoint;
+  var Area := 0.0;
+  for var Point := 1 to high(Result) do
+  Area := Area + Result[Point-1].X*Result[Point].Y - Result[Point].X*Result[Point-1].Y;
+  if (Area < 0) <> Clockwise then
+  for var Point := 0 to (Length(Result) div 2)-1 do
+  begin
+    var Swap := Result[Point];
+    Result[Point] := Result[high(Result)-Point];
+    Result[high(Result)-Point] := Swap;
+  end;
+end;
+
 Procedure TESRIPolygonShapeFileWriter.Write(Polygon: TMultiPoint; const Properties: array of Variant);
 begin
   Write([Polygon],Properties);
 end;
 
 Procedure TESRIPolygonShapeFileWriter.Write(Polygons: TMultiPoints; const Properties: array of Variant);
+Var
+  Shape: TGISShape;
+  Rings: TMultiPoints;
 begin
-  // Close polygons if not already closed; reject rings with fewer than 2 points
+  // Close the rings that are not closed yet; a ring takes at least two points
+  SetLength(Rings,Length(Polygons));
   for var Part := low(Polygons) to high(Polygons) do
   begin
     var NPoints := Length(Polygons[Part]);
     if NPoints > 1 then
     begin
+      Rings[Part] := Polygons[Part];
       if (Polygons[Part,0].X <> Polygons[Part,NPoints-1].X)
       or (Polygons[Part,0].Y <> Polygons[Part,NPoints-1].Y) then
-      Polygons[Part] := Polygons[Part] + [Polygons[Part,0]];
+      Rings[Part] := Rings[Part] + [Polygons[Part,0]];
     end else
       raise Exception.Create('Invalid polygon')
   end;
+  // The format tells outer rings from holes by their direction: outer rings run clockwise and
+  // holes counter-clockwise. Each outer ring is written with its holes after it.
+  Shape.AssignPolyPolygon(Rings);
+  var PolyPolygons := TPolyPolygons.Create(Shape);
+  Rings := [];
+  for var Polygon := 0 to PolyPolygons.Count-1 do
+  begin
+    Rings := Rings + [Oriented(PolyPolygons[Polygon].OuterRing,true)];
+    for var Hole := 0 to PolyPolygons[Polygon].HolesCount-1 do
+    Rings := Rings + [Oriented(PolyPolygons[Polygon].Holes[Hole],false)];
+  end;
   // Write polygons
-  WriteMultiPoints(Polygons);
+  WriteMultiPoints(Rings);
   // Write properties
   WriteProperties(Properties);
 end;

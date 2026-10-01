@@ -44,6 +44,7 @@ type
     Function TempBase: String;
     Procedure DeleteTempFiles;
     Function BigEndianHeaderField(const FileName: String): Integer;
+    Function SignedArea(const Ring: TShapePart): Double;
   public
     [Test] Procedure WritePolygon_RoundTrip;
     [Test] Procedure WriteMultiplePolygons_CountMatches;
@@ -57,6 +58,8 @@ type
     [Test] Procedure WritePolygon_SinglePoint_Raises;
     [Test] Procedure WriteWithFields_ReadsTheValuesBack;
     [Test] Procedure WriteValuesWithoutFields_Raises;
+    [Test] Procedure WritePolygon_OuterRingIsWrittenClockwise;
+    [Test] Procedure WritePolygonWithHole_HoleIsWrittenCounterClockwise;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -361,7 +364,8 @@ begin
   try
     Assert.IsTrue(R.ReadShape(Read, Props));
     Assert.AreEqual(Ord(stPolygon), Ord(Read.ShapeType), 'Shape type');
-    Assert.AreEqual(10.0, Read[0,1].X, 1e-10, 'Second point X');
+    // The ring was given counter-clockwise and is written clockwise, from the same first point
+    Assert.AreEqual(10.0, Read[0,1].Y, 1e-10, 'Second point Y');
     Assert.IsFalse(R.ReadShape(Read, Props), 'Only one shape expected');
   finally
     R.Free;
@@ -655,6 +659,67 @@ begin
     Assert.WillRaise(Procedure begin W.Write(1, 2, [3]) end, Exception);
   finally
     W.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Function TESRIWriterTests.SignedArea(const Ring: TShapePart): Double;
+// Positive for a ring running counter-clockwise, negative for one running clockwise
+begin
+  Result := 0;
+  for var Point := 1 to Ring.Count - 1 do
+    Result := Result + Ring[Point-1].X*Ring[Point].Y - Ring[Point].X*Ring[Point-1].Y;
+  Result := Result/2;
+end;
+
+Procedure TESRIWriterTests.WritePolygon_OuterRingIsWrittenClockwise;
+// The format tells outer rings from holes by their direction; this ring is given counter-clockwise
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFiles;
+  var W := TESRIPolygonShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write([TCoordinate.Create(0, 0), TCoordinate.Create(10, 0), TCoordinate.Create(10, 10), TCoordinate.Create(0, 10)], []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(-100.0, SignedArea(Read.Parts[0]), 1e-9, 'Clockwise, and the same square');
+  finally
+    R.Free;
+  end;
+  DeleteTempFiles;
+end;
+
+Procedure TESRIWriterTests.WritePolygonWithHole_HoleIsWrittenCounterClockwise;
+// The hole is given first, and clockwise; the outer ring second, and counter-clockwise
+var
+  Read: TGISShape;
+  Props: TGISShapeProperties;
+  Rings: TMultiPoints;
+begin
+  DeleteTempFiles;
+  SetLength(Rings, 2);
+  Rings[0] := [TCoordinate.Create(-1, -1), TCoordinate.Create(-1, 1), TCoordinate.Create(1, 1), TCoordinate.Create(1, -1)];
+  Rings[1] := [TCoordinate.Create(-5, -5), TCoordinate.Create(5, -5), TCoordinate.Create(5, 5), TCoordinate.Create(-5, 5)];
+  var W := TESRIPolygonShapeFileWriter.Create(TempBase + '.shp', []);
+  try
+    W.Write(Rings, []);
+  finally
+    W.Free;
+  end;
+  var R := TESRIShapeFileReader.Create(TempBase + '.shp');
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual(2, Read.Count, 'Ring count');
+    Assert.AreEqual(-100.0, SignedArea(Read.Parts[0]), 1e-9, 'The outer ring first, clockwise');
+    Assert.AreEqual(4.0, SignedArea(Read.Parts[1]), 1e-9, 'The hole after it, counter-clockwise');
+  finally
+    R.Free;
   end;
   DeleteTempFiles;
 end;
