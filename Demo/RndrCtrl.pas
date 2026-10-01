@@ -33,6 +33,7 @@ type
     FLabels:      TArray<String>;  // label per shape when labelling by field
     Function  FieldIndex(const Properties: TGISShapeProperties; const Field: Integer): Integer;
     Procedure SetLabelSource(LabelSource: Integer);
+    Function  GetProperties(Shape: Integer): TGISShapeProperties;
   strict protected
     Function ShapeLabel(const Shape: Integer): String; override;
   public
@@ -42,6 +43,8 @@ type
   public
     // The attribute fields found in the shapes, in the order first seen
     Property FieldNames: TArray<String> read FFieldNames;
+    // The attributes read with a shape; none for a shape added without them
+    Property Properties[Shape: Integer]: TGISShapeProperties read GetProperties;
     // lsNone, lsFeatureNumber or an index into FieldNames
     Property LabelSource: Integer read FLabelSource write SetLabelSource;
   end;
@@ -150,6 +153,11 @@ begin
     FLabelSource := LabelSource;
     FLabels := nil;
   end;
+end;
+
+Function TLabeledShapesLayer.GetProperties(Shape: Integer): TGISShapeProperties;
+begin
+  if Shape < Length(FProperties) then Result := FProperties[Shape] else Result := nil;
 end;
 
 Function TLabeledShapesLayer.ShapeLabel(const Shape: Integer): String;

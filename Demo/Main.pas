@@ -852,7 +852,7 @@ begin
   if (Idx < 0) or (Idx >= Layers.Count) then Exit;
   Writable := [];
   for var FF in FileFormats do
-    if FF.CanWrite then Writable := Writable + [FF];
+    if FF.CanWrite([Layers[Idx]]) then Writable := Writable + [FF];
   if Length(Writable) = 0 then Exit;
   FormatFilter(Writable, Filter, Extensions);
   Dlg := TSaveDialog.Create(nil);
@@ -862,7 +862,7 @@ begin
     Dlg.DefaultExt  := Copy(Extensions[0], 2, MaxInt);
     Dlg.Options     := [ofOverwritePrompt];
     if Dlg.Execute then
-      Writable[SavedFormat(Dlg, Extensions, FileName)].SaveLayer(FileName, Layers[Idx]);
+      Writable[SavedFormat(Dlg, Extensions, FileName)].SaveLayers(FileName, [Layers[Idx]]);
   finally
     Dlg.Free;
   end;
@@ -876,14 +876,14 @@ var
   Dlg: TSaveDialog;
 begin
   if Layers.Count = 0 then Exit;
-  MultiLayer := [];
-  for var FF in FileFormats do
-    if FF.CanWrite and FF.MultiLayerSupport then MultiLayer := MultiLayer + [FF];
-  if Length(MultiLayer) = 0 then Exit;
-  FormatFilter(MultiLayer, Filter, Extensions);
   var All: TArray<TLayer>;
   SetLength(All, Layers.Count);
   for var I := 0 to Layers.Count - 1 do All[I] := Layers[I];
+  MultiLayer := [];
+  for var FF in FileFormats do
+    if FF.CanWrite(All) then MultiLayer := MultiLayer + [FF];
+  if Length(MultiLayer) = 0 then Exit;
+  FormatFilter(MultiLayer, Filter, Extensions);
   Dlg := TSaveDialog.Create(nil);
   try
     Dlg.Filter      := Filter;

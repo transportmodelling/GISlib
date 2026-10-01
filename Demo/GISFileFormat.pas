@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  SysUtils,
+  SysUtils, Variants, DBF,
   Vcl.Graphics, Vcl.Forms, Vcl.StdCtrls, Vcl.Controls,
   GISCoordSystem, RndrCtrl,
   GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON, GIS.Shapes.Geopackage,
@@ -37,22 +37,30 @@ type
     Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; virtual; abstract;
-    // Write support
-    Function CanWrite: Boolean; virtual;
-    Function MultiLayerSupport: Boolean; virtual;
-    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); virtual;
+    // Whether the format can hold these layers in one file; false by default
+    Function CanWrite(const ALayers: TArray<TLayer>): Boolean; virtual;
+    // Writes the layers, with their attributes, to one file
     Procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); virtual;
   end;
 
   TESRIFileFormat = class(TGISFileFormat)
+  private
+    // The DBF fields for all attributes of the layers, and the attribute each holds
+    Procedure Fields(const ALayers: TArray<TLayer>; out AFields: TArray<TDBFField>; out AAttributes: TArray<String>);
+    // The values of a shape's attributes, in the order of the fields
+    Function Values(const AShapes: TLabeledShapesLayer; const AShape: Integer;
+                    const AFields: TArray<TDBFField>; const AAttributes: TArray<String>): TArray<Variant>;
+    // The one type of all shapes in the layers, or stEmpty when there is none or more than one
+    Function ShapeType(const ALayers: TArray<TLayer>): TShapeType;
   public
     Function Name: String; override;
     Function Extensions: TArray<String>; override;
     Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; override;
-    Function CanWrite: Boolean; override;
-    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
+    // A shapefile holds shapes of one type
+    Function CanWrite(const ALayers: TArray<TLayer>): Boolean; override;
+    Procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); override;
   end;
 
   TGeoJSONFileFormat = class(TGISFileFormat)
@@ -62,8 +70,9 @@ type
     Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; override;
-    Function CanWrite: Boolean; override;
-    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
+    // One layer, as a feature collection
+    Function CanWrite(const ALayers: TArray<TLayer>): Boolean; override;
+    Procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); override;
   end;
 
   TGeoPackageFileFormat = class(TGISFileFormat)
@@ -83,9 +92,8 @@ type
     Function OpenFile(const AFileName: String;
                       const ACoordSystems: TArray<TGISCoordinateSystem>;
                       const APrimary: TWebMercatorPixelConverter): TArray<TLayer>; override;
-    Function CanWrite: Boolean; override;
-    Function MultiLayerSupport: Boolean; override;
-    Procedure SaveLayer(const AFileName: String; const ALayer: TLayer); override;
+    // Any layers, each as a layer of the package
+    Function CanWrite(const ALayers: TArray<TLayer>): Boolean; override;
     Procedure SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>); override;
   end;
 
@@ -162,24 +170,14 @@ begin
   end;
 end;
 
-Function TGISFileFormat.CanWrite: Boolean;
+Function TGISFileFormat.CanWrite(const ALayers: TArray<TLayer>): Boolean;
 begin
   Result := False;
-end;
-
-Function TGISFileFormat.MultiLayerSupport: Boolean;
-begin
-  Result := False;
-end;
-
-Procedure TGISFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
-begin
-  raise Exception.CreateFmt('%s does not support writing', [Name]);
 end;
 
 Procedure TGISFileFormat.SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>);
 begin
-  raise Exception.CreateFmt('%s does not support multi-layer writing', [Name]);
+  raise Exception.CreateFmt('%s does not support writing', [Name]);
 end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -210,76 +208,138 @@ begin
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
 end;
 
-Function TESRIFileFormat.CanWrite: Boolean;
+Procedure TESRIFileFormat.Fields(const ALayers: TArray<TLayer>; out AFields: TArray<TDBFField>; out AAttributes: TArray<String>);
+var
+  TakenNames: TArray<String>;
 begin
-  Result := True;
+  AFields := [];
+  AAttributes := [];
+  TakenNames := [];
+  for var Layer in ALayers do
+    for var Name in Layer.Shapes.FieldNames do
+    begin
+      var Known := false;
+      for var Attribute in AAttributes do
+        if SameText(Attribute, Name) then
+        begin
+          Known := true;
+          Break;
+        end;
+      if not Known then
+      begin
+        // The field is sized to the values the attribute takes in all the layers
+        var Builder := TDBFFieldBuilder.Create;
+        try
+          for var ValueLayer in ALayers do
+            for var Shape := 0 to ValueLayer.Shapes.Count - 1 do
+            begin
+              var Props := ValueLayer.Shapes.Properties[Shape];
+              for var Prop := 0 to High(Props) do
+                if SameText(Props[Prop].Key, Name) then
+                begin
+                  Builder.Add(Props[Prop].Value);
+                  Break;
+                end;
+            end;
+          var DbfField := Builder.Field(Builder.ValidName(Name, TakenNames));
+          AFields := AFields + [DbfField];
+          AAttributes := AAttributes + [Name];
+          TakenNames := TakenNames + [DbfField.FieldName];
+        finally
+          Builder.Free;
+        end;
+      end;
+    end;
 end;
 
-Procedure TESRIFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
+Function TESRIFileFormat.Values(const AShapes: TLabeledShapesLayer; const AShape: Integer;
+                                const AFields: TArray<TDBFField>; const AAttributes: TArray<String>): TArray<Variant>;
+begin
+  SetLength(Result, Length(AFields));
+  var Props := AShapes.Properties[AShape];
+  for var Field := 0 to High(AFields) do
+  begin
+    Result[Field] := Null;
+    for var Prop := 0 to High(Props) do
+      if SameText(Props[Prop].Key, AAttributes[Field]) then
+      begin
+        var Value := Props[Prop].Value;
+        if not (VarIsNull(Value) or VarIsEmpty(Value)) then
+          if AFields[Field].FieldType = 'C' then Result[Field] := VarToStr(Value) else Result[Field] := Value;
+        Break;
+      end;
+  end;
+end;
+
+Function TESRIFileFormat.ShapeType(const ALayers: TArray<TLayer>): TShapeType;
+begin
+  Result := stEmpty;
+  for var Layer in ALayers do
+    for var Kind := stPoint to stPolygon do
+      if Layer.Shapes.ShapeCount(Kind) > 0 then
+      begin
+        if Result = stEmpty then Result := Kind;
+        if Result <> Kind then Exit(stEmpty);
+      end;
+end;
+
+Function TESRIFileFormat.CanWrite(const ALayers: TArray<TLayer>): Boolean;
+begin
+  Result := (Length(ALayers) > 0) and (ShapeType(ALayers) <> stEmpty);
+end;
+
+Procedure TESRIFileFormat.SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>);
 var
-  I: Integer;
-  Shape: TGISShape;
+  DbfFields: TArray<TDBFField>;
+  Attributes: TArray<String>;
   Parts: TMultiPoints;
 begin
-  // Determine dominant shape type
-  var Shapes := ALayer.Shapes;
-  var ST := stEmpty;
-  if Shapes.ShapeCount(stPolygon) > 0 then ST := stPolygon
-  else if Shapes.ShapeCount(stLine) > 0 then ST := stLine
-  else if Shapes.ShapeCount(stPoint) > 0 then ST := stPoint;
-  case ST of
+  Fields(ALayers, DbfFields, Attributes);
+  case ShapeType(ALayers) of
     stPoint:
       begin
-        var W := TESRIPointShapeFileWriter.Create(AFileName, []);
+        var W := TESRIPointShapeFileWriter.Create(AFileName, DbfFields);
         try
-          for I := 0 to Shapes.Count - 1 do
-          begin
-            Shape := Shapes[I];
-            if Shape.ShapeType = stPoint then
-              W.Write(Shape[0, 0], []);
-          end;
+          for var Layer in ALayers do
+            for var I := 0 to Layer.Shapes.Count - 1 do
+              W.Write(Layer.Shapes[I][0, 0], Values(Layer.Shapes, I, DbfFields, Attributes));
         finally
           W.Free;
         end;
       end;
     stLine:
       begin
-        var W := TESRIPolyLineShapeFileWriter.Create(AFileName, []);
+        var W := TESRIPolyLineShapeFileWriter.Create(AFileName, DbfFields);
         try
-          for I := 0 to Shapes.Count - 1 do
-          begin
-            Shape := Shapes[I];
-            if Shape.ShapeType = stLine then
+          for var Layer in ALayers do
+            for var I := 0 to Layer.Shapes.Count - 1 do
             begin
+              var Shape := Layer.Shapes[I];
               SetLength(Parts, Shape.Count);
-              for var J := 0 to Shape.Count - 1 do
-                Parts[J] := Shape.Parts[J].AsMultiPoint;
-              W.Write(Parts, []);
+              for var J := 0 to Shape.Count - 1 do Parts[J] := Shape.Parts[J].AsMultiPoint;
+              W.Write(Parts, Values(Layer.Shapes, I, DbfFields, Attributes));
             end;
-          end;
         finally
           W.Free;
         end;
       end;
     stPolygon:
       begin
-        var W := TESRIPolygonShapeFileWriter.Create(AFileName, []);
+        var W := TESRIPolygonShapeFileWriter.Create(AFileName, DbfFields);
         try
-          for I := 0 to Shapes.Count - 1 do
-          begin
-            Shape := Shapes[I];
-            if Shape.ShapeType = stPolygon then
+          for var Layer in ALayers do
+            for var I := 0 to Layer.Shapes.Count - 1 do
             begin
+              var Shape := Layer.Shapes[I];
               SetLength(Parts, Shape.Count);
-              for var J := 0 to Shape.Count - 1 do
-                Parts[J] := Shape.Parts[J].AsMultiPoint;
-              W.Write(Parts, []);
+              for var J := 0 to Shape.Count - 1 do Parts[J] := Shape.Parts[J].AsMultiPoint;
+              W.Write(Parts, Values(Layer.Shapes, I, DbfFields, Attributes));
             end;
-          end;
         finally
           W.Free;
         end;
       end;
+    else raise Exception.Create('A shapefile holds shapes of one type');
   end;
 end;
 
@@ -311,19 +371,18 @@ begin
   Result[0] := TLayer.Create(Shapes, ExtractFileName(AFileName), CS, 160, APrimary);
 end;
 
-Function TGeoJSONFileFormat.CanWrite: Boolean;
+Function TGeoJSONFileFormat.CanWrite(const ALayers: TArray<TLayer>): Boolean;
 begin
-  Result := True;
+  Result := Length(ALayers) = 1;
 end;
 
-Procedure TGeoJSONFileFormat.SaveLayer(const AFileName: String; const ALayer: TLayer);
-var
-  I: Integer;
+Procedure TGeoJSONFileFormat.SaveLayers(const AFileName: String; const ALayers: TArray<TLayer>);
 begin
   var Writer := TGeoJSONWriter.Create(AFileName);
   try
-    for I := 0 to ALayer.Shapes.Count - 1 do
-      Writer.WriteShape(ALayer.Shapes[I]);
+    for var Layer in ALayers do
+      for var I := 0 to Layer.Shapes.Count - 1 do
+        Writer.WriteShape(Layer.Shapes[I], Layer.Shapes.Properties[I]);
   finally
     Writer.Free;
   end;
@@ -453,14 +512,9 @@ begin
   end;
 end;
 
-Function TGeoPackageFileFormat.CanWrite: Boolean;
+Function TGeoPackageFileFormat.CanWrite(const ALayers: TArray<TLayer>): Boolean;
 begin
-  Result := True;
-end;
-
-Function TGeoPackageFileFormat.MultiLayerSupport: Boolean;
-begin
-  Result := True;
+  Result := Length(ALayers) > 0;
 end;
 
 Procedure TGeoPackageFileFormat.WriteLayer(const AWriter: TGeopackageWriter;
@@ -480,31 +534,15 @@ begin
   // The layer writer reads the coordinate system off the converter without taking it over
   var Converter := ALayer.CoordSystem.CreateConverter;
   try
-    var LW := AWriter.CreateLayerWriter(LayerName, Converter);
+    var LW := AWriter.CreateLayerWriter(LayerName, Converter, ALayer.Shapes.FieldNames);
     try
       for var I := 0 to ALayer.Shapes.Count - 1 do
-        LW.WriteShape(ALayer.Shapes[I], nil);
+        LW.WriteShape(ALayer.Shapes[I], ALayer.Shapes.Properties[I]);
     finally
       LW.Free;
     end;
   finally
     Converter.Free;
-  end;
-end;
-
-Procedure TGeoPackageFileFormat.SaveLayer(const AFileName: String;
-                                          const ALayer: TLayer);
-begin
-  var Pkg := TGeopackage.Create(AFileName, gpReadWrite);
-  try
-    var Writer := Pkg.CreateWriter;
-    try
-      WriteLayer(Writer, ALayer, AFileName);
-    finally
-      Writer.Free;
-    end;
-  finally
-    Pkg.Free;
   end;
 end;
 
