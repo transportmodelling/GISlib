@@ -55,21 +55,22 @@ Type
     Procedure WriteCoordinateValues(const Polygons: TArray<TMultiPoints>); overload;
     // The rings with each of them closed, as GeoJSON requires
     Function ClosedRings(const Rings: TMultiPoints): TMultiPoints;
-    Procedure WriteEndFeature(const Properties: array of TPair<String,TValue>);
+    Procedure WriteEndFeature(const Properties: TGISShapeProperties);
   public
     Constructor Create(const FileName: String;
                        const Formatting: TJSONFormatting = TJSONFormatting.Indented);
-    Procedure WritePoint(X,Y: Float64; const Properties: array of TPair<String,TValue>); overload;
-    Procedure WritePoint(Point: TCoordinate; const Properties: array of TPair<String,TValue>); overload;
-    Procedure WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: array of TPair<String,TValue>);
-    Procedure WriteLineString(LineString: TMultiPoint; const Properties: array of TPair<String,TValue>);
-    Procedure WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: array of TPair<String,TValue>);
+    Procedure WritePoint(X,Y: Float64; const Properties: TGISShapeProperties); overload;
+    Procedure WritePoint(Point: TCoordinate; const Properties: TGISShapeProperties); overload;
+    Procedure WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: TGISShapeProperties);
+    Procedure WriteLineString(LineString: TMultiPoint; const Properties: TGISShapeProperties);
+    Procedure WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: TGISShapeProperties);
     // Writes a polygon, its outer ring first and then its holes; rings are closed automatically
-    Procedure WritePolygon(const Parts: TMultiPoints; const Properties: array of TPair<String,TValue>);
+    Procedure WritePolygon(const Parts: TMultiPoints; const Properties: TGISShapeProperties);
     // Writes a multi polygon, the rings of each polygon as for WritePolygon
-    Procedure WriteMultiPolygon(const Polygons: TArray<TMultiPoints>; const Properties: array of TPair<String,TValue>);
-    // Writes any TGISShape with empty properties; a polygon shape with more than one outer ring becomes a multi polygon
-    Procedure WriteShape(const Shape: TGISShape);
+    Procedure WriteMultiPolygon(const Polygons: TArray<TMultiPoints>; const Properties: TGISShapeProperties);
+    // Writes any TGISShape; a polygon shape with more than one outer ring becomes a multi polygon
+    Procedure WriteShape(const Shape: TGISShape); overload;
+    Procedure WriteShape(const Shape: TGISShape; const Properties: TGISShapeProperties); overload;
     Destructor Destroy; override;
   end;
 
@@ -232,7 +233,7 @@ begin
     raise Exception.Create('Invalid GeoJson-object');
 end;
 
-Function TGeoJSONReader.ReadShape(out Shape: TGISShape; out Properties: TArray<TPair<String,Variant>>): Boolean;
+Function TGeoJSONReader.ReadShape(out Shape: TGISShape; out Properties: TGISShapeProperties): Boolean;
 begin
   if not EndOfFile then
   begin
@@ -353,7 +354,7 @@ begin
   end;
 end;
 
-Procedure TGeoJSONWriter.WriteEndFeature(const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WriteEndFeature(const Properties: TGISShapeProperties);
 begin
   JSONWriter.WriteEndObject;
   JSONWriter.WritePropertyName('properties');
@@ -361,53 +362,53 @@ begin
   for var Prop := low(Properties) to high(Properties) do
   begin
     JSONWriter.WritePropertyName(Properties[Prop].Key);
-    JSONWriter.WriteValue(Properties[Prop].Value);
+    JSONWriter.WriteValue(TValue.FromVariant(Properties[Prop].Value));
   end;
   JSONWriter.WriteEndObject;
   JSONWriter.WriteEndObject;
 end;
 
-Procedure TGeoJSONWriter.WritePoint(X,Y: Float64; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WritePoint(X,Y: Float64; const Properties: TGISShapeProperties);
 begin
   WritePoint(TCoordinate.Create(X,Y),Properties);
 end;
 
-Procedure TGeoJSONWriter.WritePoint(Point: TCoordinate; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WritePoint(Point: TCoordinate; const Properties: TGISShapeProperties);
 begin
   WriteStartFeature('Point');
   WriteCoordinateValue(Point);
   WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WriteMultiPoint(MultiPoint: TMultiPoint; const Properties: TGISShapeProperties);
 begin
   WriteStartFeature('MultiPoint');
   WriteCoordinateValues(MultiPoint);
   WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteLineString(LineString: TMultiPoint; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WriteLineString(LineString: TMultiPoint; const Properties: TGISShapeProperties);
 begin
   WriteStartFeature('LineString');
   WriteCoordinateValues(LineString);
   WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WriteMultiLineString(MultiLineString: TMultiPoints; const Properties: TGISShapeProperties);
 begin
   WriteStartFeature('MultiLineString');
   WriteCoordinateValues(MultiLineString);
   WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WritePolygon(const Parts: TMultiPoints; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WritePolygon(const Parts: TMultiPoints; const Properties: TGISShapeProperties);
 begin
   WriteStartFeature('Polygon');
   WriteCoordinateValues(ClosedRings(Parts));
   WriteEndFeature(Properties);
 end;
 
-Procedure TGeoJSONWriter.WriteMultiPolygon(const Polygons: TArray<TMultiPoints>; const Properties: array of TPair<String,TValue>);
+Procedure TGeoJSONWriter.WriteMultiPolygon(const Polygons: TArray<TMultiPoints>; const Properties: TGISShapeProperties);
 var
   ClosedPolygons: TArray<TMultiPoints>;
 begin
@@ -419,33 +420,38 @@ begin
 end;
 
 Procedure TGeoJSONWriter.WriteShape(const Shape: TGISShape);
+begin
+  WriteShape(Shape,[]);
+end;
+
+Procedure TGeoJSONWriter.WriteShape(const Shape: TGISShape; const Properties: TGISShapeProperties);
 var
   Parts: TMultiPoints;
   Polygons: TArray<TMultiPoints>;
 begin
   case Shape.ShapeType of
     stPoint:
-      WritePoint(Shape[0,0],[]);
+      WritePoint(Shape[0,0],Properties);
     stLine:
       begin
         SetLength(Parts,Shape.Count);
         for var Part := 0 to Shape.Count - 1 do Parts[Part] := Shape.Parts[Part].AsMultiPoint;
         if Shape.Count = 1 then
-          WriteLineString(Parts[0],[])
+          WriteLineString(Parts[0],Properties)
         else
-          WriteMultiLineString(Parts,[]);
+          WriteMultiLineString(Parts,Properties);
       end;
     stPolygon:
       begin
         // The rings are sorted into outer rings and their holes, which is how GeoJSON takes them
         var PolyPolygons := TPolyPolygons.Create(Shape);
         if PolyPolygons.Count = 1 then
-          WritePolygon(PolyPolygons[0].Rings,[])
+          WritePolygon(PolyPolygons[0].Rings,Properties)
         else
         begin
           SetLength(Polygons,PolyPolygons.Count);
           for var Polygon := 0 to PolyPolygons.Count-1 do Polygons[Polygon] := PolyPolygons[Polygon].Rings;
-          WriteMultiPolygon(Polygons,[]);
+          WriteMultiPolygon(Polygons,Properties);
         end;
       end;
   end;

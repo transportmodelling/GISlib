@@ -16,7 +16,8 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.JSON, DUnitX.TestFramework, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
+  System.JSON, System.Generics.Collections, DUnitX.TestFramework,
+  GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
 
 type
   [TestFixture]
@@ -34,6 +35,7 @@ type
     [Test] Procedure WriteMultipleShapes_AllRead;
     [Test] Procedure WriteShape_TwoOuterRings_WritesMultiPolygon;
     [Test] Procedure WriteShape_HoleListedFirst_WritesOuterRingFirst;
+    [Test] Procedure WriteShape_WithProperties_ReadsThemBack;
   end;
 
   [TestFixture]
@@ -275,6 +277,31 @@ begin
   finally
     Document.Free;
   end;
+end;
+
+Procedure TGeoJSONWriterTests.WriteShape_WithProperties_ReadsThemBack;
+var
+  Written, Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFile;
+  Written.AssignPoint(5.4, 52.2);
+  var W := TGeoJSONWriter.Create(TempFile);
+  try
+    W.WriteShape(Written, [TPair<String,Variant>.Create('name', 'Amersfoort'),
+                           TPair<String,Variant>.Create('order', 3)]);
+  finally
+    W.Free;
+  end;
+  var R := TGeoJSONReader.Create(TempFile);
+  try
+    Assert.IsTrue(R.ReadShape(Read, Props));
+    Assert.AreEqual('Amersfoort', String(Props.ValueFromName['name']));
+    Assert.AreEqual(3, Integer(Props.ValueFromName['order']));
+  finally
+    R.Free;
+  end;
+  DeleteTempFile;
 end;
 
 ////////////////////////////////////////////////////////////////////////////////

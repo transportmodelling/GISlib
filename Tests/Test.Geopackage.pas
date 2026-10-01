@@ -66,6 +66,7 @@ type
     [Test] Procedure Writer_ManyShapes_AllReadBack;
     [Test] Procedure Writer_NewFile_IdentifiesItselfAsGeoPackage;
     [Test] Procedure Writer_StoresTheLayerBounds;
+    [Test] Procedure Writer_ConverterOverload_WritesProperties;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -826,6 +827,47 @@ begin
   Assert.AreEqual( 2.0, Double(QueryValue('SELECT min_y FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'min_y');
   Assert.AreEqual( 1.0, Double(QueryValue('SELECT max_x FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'max_x');
   Assert.AreEqual( 5.0, Double(QueryValue('SELECT max_y FROM gpkg_contents WHERE table_name = ''points''')), 1e-12, 'max_y');
+  DeleteTempFile;
+end;
+
+Procedure TGeopackageTests.Writer_ConverterOverload_WritesProperties;
+var
+  Written, Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFile;
+  Written.AssignPoint(5.4, 52.2);
+  var Converter := TWgs84CoordinateConverter.Create;
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('places', Converter, ['name']);
+      try
+        LW.WriteShape(Written, [TPair<String,Variant>.Create('name', 'Amersfoort')]);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+    Converter.Free;
+  end;
+  Pkg := TGeopackage.Create(TempFile);
+  try
+    var Reader := Pkg.CreateReader('places');
+    try
+      Assert.IsTrue(Reader.ReadShape(Read, Props));
+      Assert.AreEqual(4326, Reader.SRID, 'SRID from the converter');
+      Assert.AreEqual('Amersfoort', String(Props.ValueFromName['name']));
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
   DeleteTempFile;
 end;
 

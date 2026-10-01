@@ -144,8 +144,10 @@ type
     Function CreateLayerWriter(const LayerName: String; const SRID: Integer;
                                const PropNames: TArray<String>): TGeopackageLayerWriter; overload;
     Function CreateLayerWriter(const LayerName: String; const SRID: Integer): TGeopackageLayerWriter; overload;
-    // Overload that reads SRID and WKT definition directly from the converter.
+    // Overloads that read SRID and WKT definition directly from the converter.
     Function CreateLayerWriter(const LayerName: String; const Converter: TCoordinateConverter): TGeopackageLayerWriter; overload;
+    Function CreateLayerWriter(const LayerName: String; const Converter: TCoordinateConverter;
+                               const PropNames: TArray<String>): TGeopackageLayerWriter; overload;
   public
     property Package: TGeopackage read FPackage;
   end;
@@ -904,12 +906,19 @@ end;
 Function TGeopackageWriter.CreateLayerWriter(const LayerName: String;
                                              const Converter: TCoordinateConverter): TGeopackageLayerWriter;
 begin
+  Result := CreateLayerWriter(LayerName, Converter, []);
+end;
+
+Function TGeopackageWriter.CreateLayerWriter(const LayerName: String;
+                                             const Converter: TCoordinateConverter;
+                                             const PropNames: TArray<String>): TGeopackageLayerWriter;
+begin
   // The undefined systems (-1 Cartesian, 0 geographic) belong to no organization
   if Converter.SRID > 0 then
     InsertSRS(Converter.SRID, Converter.SRSName, 'EPSG', Converter.SRSDefinition)
   else
     InsertSRS(Converter.SRID, Converter.SRSName, 'NONE', Converter.SRSDefinition);
-  Result := CreateLayerWriter(LayerName, Converter.SRID, []);
+  Result := CreateLayerWriter(LayerName, Converter.SRID, PropNames);
 end;
 
 end.
