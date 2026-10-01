@@ -12,7 +12,7 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 Uses
-  SysUtils, Classes, Rtti, Generics.Collections, JSON, JSON.Types, JSON.Writers, JSON.ObjArr,
+  SysUtils, Classes, Variants, Rtti, Generics.Collections, JSON, JSON.Types, JSON.Writers, JSON.ObjArr,
   Json.Eval, GIS, GIS.Shapes, GIS.Shapes.Polygon;
 
 Type
@@ -138,6 +138,7 @@ begin
   end else
   if Value is TJSONString then Result := Value.Value else
   if Value is TJSONBool then Result := TJSONBool(Value).AsBoolean else
+  if Value is TJSONNull then Result := Null else
   Result := Value.ToString;
 end;
 
@@ -205,6 +206,8 @@ Var
   GeometryType: String;
   Coordinates: TJsonValue;
 begin
+  // A feature need not have a geometry (RFC 7946); it is then an empty shape
+  if GeoJsonObject.GetValue('geometry') is TJSONNull then Shape.Clear else
   if TJsonEvaluator.GetStr(GeoJsonObject,['geometry','type'],GeometryType) and
      TJsonEvaluator.NavigateTo(GeoJsonObject,['geometry','coordinates'],Coordinates) then
   begin

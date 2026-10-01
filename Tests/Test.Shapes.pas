@@ -17,7 +17,8 @@ interface
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.SysUtils, DUnitX.TestFramework, DBF, GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
+  System.SysUtils, System.Variants, DUnitX.TestFramework, DBF,
+  GIS, GIS.Shapes, GIS.Shapes.ESRI, GIS.Shapes.GeoJSON;
 
 type
   [TestFixture]
@@ -92,6 +93,27 @@ type
     [TearDown] Procedure TearDown;
     [Test] Procedure Utf8WithoutBom;
     [Test] Procedure Utf8WithBom;
+  end;
+
+  [TestFixture]
+  TGeoJSONReaderTests = class
+  private
+    FDir: String;
+    // Reads every feature of the document given, as shapes with their properties
+    Procedure ReadAll(const Json: String; out Shapes: TArray<TGISShape>; out Properties: TArray<TGISShapeProperties>);
+    // A feature collection holding one feature with the geometry given
+    Function Collection(const Geometry: String; const Properties: String = '{}'): String;
+  public
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
+    [Test] Procedure PropertyValues_KeepTheirTypes;
+    [Test] Procedure MultiPoint_IsOnePointsShape;
+    [Test] Procedure MultiLineString_IsOneShapeWithAPartPerLine;
+    [Test] Procedure MultiPolygon_IsOneShapeWithAllRings;
+    [Test] Procedure NullGeometry_IsAnEmptyShapeWithItsProperties;
+    [Test] Procedure GeometryCollection_Raises;
+    [Test] Procedure NotAFeatureCollection_Raises;
+    [Test] Procedure EndOfFile_AfterTheLastFeature;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -407,10 +429,153 @@ begin
   Assert.AreEqual('Frysl'#$E2'n', FeatureName(TEncoding.UTF8.GetPreamble + Utf8Document));
 end;
 
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TGeoJSONReaderTests.Setup;
+begin
+  FDir := TPath.Combine(TPath.GetTempPath, 'GISlibGeoJSONReader' + TGUID.NewGuid.ToString);
+  TDirectory.CreateDirectory(FDir);
+end;
+
+Procedure TGeoJSONReaderTests.TearDown;
+begin
+  TDirectory.Delete(FDir, true);
+end;
+
+Procedure TGeoJSONReaderTests.ReadAll(const Json: String; out Shapes: TArray<TGISShape>; out Properties: TArray<TGISShapeProperties>);
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var FileName := TPath.Combine(FDir, 'Features.geojson');
+  TFile.WriteAllText(FileName, Json);
+  Shapes := [];
+  Properties := [];
+  var Reader := TGeoJSONReader.Create(FileName);
+  try
+    while Reader.ReadShape(Shape, Props) do
+    begin
+      Shapes := Shapes + [Shape];
+      Properties := Properties + [Props];
+    end;
+  finally
+    Reader.Free;
+  end;
+end;
+
+Function TGeoJSONReaderTests.Collection(const Geometry: String; const Properties: String = '{}'): String;
+begin
+  Result := '{"type":"FeatureCollection","features":[' +
+            '{"type":"Feature","geometry":' + Geometry + ',"properties":' + Properties + '}]}';
+end;
+
+Procedure TGeoJSONReaderTests.PropertyValues_KeepTheirTypes;
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  ReadAll(Collection('{"type":"Point","coordinates":[1,2]}',
+                     '{"i":3,"f":2.5,"b":true,"s":"text","n":null}'), Shapes, Properties);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  var Props := Properties[0];
+  Assert.AreEqual(5, Integer(Length(Props)), 'Property count');
+  Assert.AreEqual(3, Integer(Props.ValueFromName['i']), 'Whole number');
+  Assert.AreEqual(2.5, Double(Props.ValueFromName['f']), 1e-12, 'Fraction');
+  Assert.IsTrue(Boolean(Props.ValueFromName['b']), 'Boolean');
+  Assert.AreEqual('text', String(Props.ValueFromName['s']), 'Text');
+  Assert.IsTrue(VarIsNull(Props.ValueFromName['n']), 'Null');
+end;
+
+Procedure TGeoJSONReaderTests.MultiPoint_IsOnePointsShape;
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  ReadAll(Collection('{"type":"MultiPoint","coordinates":[[1,2],[3,4],[5,6]]}'), Shapes, Properties);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(Ord(stPoint), Ord(Shapes[0].ShapeType), 'Shape type');
+  Assert.AreEqual(3, Shapes[0].Parts[0].Count, 'Points');
+  Assert.AreEqual(4.0, Shapes[0][0,1].Y, 1e-12, 'Second point Y');
+end;
+
+Procedure TGeoJSONReaderTests.MultiLineString_IsOneShapeWithAPartPerLine;
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  ReadAll(Collection('{"type":"MultiLineString","coordinates":[[[0,0],[1,1]],[[2,2],[3,3],[4,4]]]}'), Shapes, Properties);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(Ord(stLine), Ord(Shapes[0].ShapeType), 'Shape type');
+  Assert.AreEqual(2, Shapes[0].Count, 'Parts');
+  Assert.AreEqual(3, Shapes[0].Parts[1].Count, 'Points of the second part');
+end;
+
+Procedure TGeoJSONReaderTests.MultiPolygon_IsOneShapeWithAllRings;
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  ReadAll(Collection('{"type":"MultiPolygon","coordinates":[' +
+                     '[[[0,0],[1,0],[1,1],[0,1],[0,0]]],' +
+                     '[[[5,5],[9,5],[9,9],[5,9],[5,5]],[[6,6],[7,6],[7,7],[6,7],[6,6]]]]}'), Shapes, Properties);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(Ord(stPolygon), Ord(Shapes[0].ShapeType), 'Shape type');
+  Assert.AreEqual(3, Shapes[0].Count, 'Rings of both polygons');
+end;
+
+Procedure TGeoJSONReaderTests.NullGeometry_IsAnEmptyShapeWithItsProperties;
+// RFC 7946 allows a feature without geometry
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  ReadAll(Collection('null', '{"name":"nowhere"}'), Shapes, Properties);
+  Assert.AreEqual(1, Integer(Length(Shapes)), 'The feature is read');
+  Assert.IsTrue(Shapes[0].Empty, 'with an empty shape');
+  Assert.AreEqual('nowhere', String(Properties[0].ValueFromName['name']), 'and its properties');
+end;
+
+Procedure TGeoJSONReaderTests.GeometryCollection_Raises;
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  Assert.WillRaise(Procedure begin
+    ReadAll(Collection('{"type":"GeometryCollection","geometries":[{"type":"Point","coordinates":[1,2]}]}'), Shapes, Properties)
+  end, Exception);
+end;
+
+Procedure TGeoJSONReaderTests.NotAFeatureCollection_Raises;
+var
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+begin
+  Assert.WillRaise(Procedure begin ReadAll('[1,2,3]', Shapes, Properties) end, Exception);
+end;
+
+Procedure TGeoJSONReaderTests.EndOfFile_AfterTheLastFeature;
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  var FileName := TPath.Combine(FDir, 'Features.geojson');
+  TFile.WriteAllText(FileName, Collection('{"type":"Point","coordinates":[1,2]}'));
+  var Reader := TGeoJSONReader.Create(FileName);
+  try
+    Assert.IsFalse(Reader.EndOfFile, 'Before the feature');
+    Assert.IsTrue(Reader.ReadShape(Shape, Props));
+    Assert.IsTrue(Reader.EndOfFile, 'After the feature');
+    Assert.IsFalse(Reader.ReadShape(Shape, Props), 'Nothing more is read');
+  finally
+    Reader.Free;
+  end;
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TESRIShapeFileReaderTests);
   TDUnitX.RegisterTestFixture(TESRIShapeFileEncodingTests);
   TDUnitX.RegisterTestFixture(TESRIShapeFileReaderFileTests);
   TDUnitX.RegisterTestFixture(TGeoJSONReaderEncodingTests);
+  TDUnitX.RegisterTestFixture(TGeoJSONReaderTests);
 
 end.
