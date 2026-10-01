@@ -70,12 +70,46 @@ type
     [Test] Procedure Writer_PropertiesNamedLikeItsColumns_AreKept;
   end;
 
+  // The reader on geometry blobs the writer does not produce, built by hand, and on errors
+  [TestFixture]
+  TGeopackageReaderTests = class
+  private
+    FFile: String;
+    // Bytes of the numbers in either byte order
+    Function LE32(const Value: Int32): TBytes;
+    Function LEF64(const Value: Double): TBytes;
+    Function BE32(const Value: Int32): TBytes;
+    Function BEF64(const Value: Double): TBytes;
+    // The GeoPackage header of a blob: magic, version, flags and SRID 4326
+    Function Header(const Flags: Byte): TBytes;
+    // A point in WKB, little-endian
+    Function Point(const X, Y: Double): TBytes;
+    // Inserts a row with the blob, or a NULL geometry for no bytes, into the one layer of the file
+    Procedure InsertRow(const Blob: TBytes; const Name: String);
+    // Reads all shapes of the layer with their names
+    Procedure ReadAll(out Shapes: TArray<TGISShape>; out Names: TArray<String>);
+  public
+    [Setup]    Procedure Setup;
+    [TearDown] Procedure TearDown;
+    [Test] Procedure PointZ_DropsZ;
+    [Test] Procedure PointZM_DropsZAndM;
+    [Test] Procedure BigEndian_IsRead;
+    [Test] Procedure Envelope_IsSkipped;
+    [Test] Procedure NullGeometry_IsSkipped;
+    [Test] Procedure EmptyGeometry_IsSkipped;
+    [Test] Procedure MultiPoint_IsOneShapePerPoint_SharingTheProperties;
+    [Test] Procedure MultiLineString_RoundTrip_IsOneShapeWithAPartPerLine;
+    [Test] Procedure MultiPolygon_RoundTrip_IsOneShapeWithAllRings;
+    [Test] Procedure MissingLayer_Raises;
+    [Test] Procedure CreateWriter_OnAReadOnlyPackage_Raises;
+  end;
+
 ////////////////////////////////////////////////////////////////////////////////
 implementation
 ////////////////////////////////////////////////////////////////////////////////
 
 uses
-  System.IOUtils, Data.DB, FireDAC.Comp.Client;
+  System.Classes, System.IOUtils, Data.DB, FireDAC.Comp.Client;
 
 Function TGeopackageTests.DataPath: String;
 begin
@@ -924,7 +958,300 @@ begin
   DeleteTempFile;
 end;
 
+////////////////////////////////////////////////////////////////////////////////
+
+Procedure TGeopackageReaderTests.Setup;
+// A package with one layer, shapes, holding a name
+begin
+  FFile := TPath.Combine(TPath.GetTempPath, 'TestGeopackageReader_' + TGUID.NewGuid.ToString + '.gpkg');
+  var Pkg := TGeopackage.Create(FFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      Writer.CreateLayerWriter('shapes', 4326, ['name']).Free;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+end;
+
+Procedure TGeopackageReaderTests.TearDown;
+begin
+  if FileExists(FFile) then TFile.Delete(FFile);
+end;
+
+Function TGeopackageReaderTests.LE32(const Value: Int32): TBytes;
+begin
+  SetLength(Result, 4);
+  Move(Value, Result[0], 4);
+end;
+
+Function TGeopackageReaderTests.LEF64(const Value: Double): TBytes;
+begin
+  SetLength(Result, 8);
+  Move(Value, Result[0], 8);
+end;
+
+Function TGeopackageReaderTests.BE32(const Value: Int32): TBytes;
+begin
+  Result := LE32(Value);
+  Result := [Result[3], Result[2], Result[1], Result[0]];
+end;
+
+Function TGeopackageReaderTests.BEF64(const Value: Double): TBytes;
+begin
+  Result := LEF64(Value);
+  Result := [Result[7], Result[6], Result[5], Result[4], Result[3], Result[2], Result[1], Result[0]];
+end;
+
+Function TGeopackageReaderTests.Header(const Flags: Byte): TBytes;
+begin
+  Result := [$47, $50, 0, Flags] + LE32(4326);
+end;
+
+Function TGeopackageReaderTests.Point(const X, Y: Double): TBytes;
+begin
+  Result := [1] + LE32(1) + LEF64(X) + LEF64(Y);
+end;
+
+Procedure TGeopackageReaderTests.InsertRow(const Blob: TBytes; const Name: String);
+begin
+  var Pkg := TGeopackage.Create(FFile, gpReadWrite);
+  try
+    var Q := TFDQuery.Create(nil);
+    try
+      Q.Connection := Pkg.Connection;
+      Q.SQL.Text := 'INSERT INTO shapes (geom, name) VALUES (:geom, :name)';
+      if Length(Blob) = 0 then
+      begin
+        Q.ParamByName('geom').DataType := ftBlob;
+        Q.ParamByName('geom').Clear;
+      end else
+      begin
+        var Stream := TBytesStream.Create(Blob);
+        try
+          Q.ParamByName('geom').LoadFromStream(Stream, ftBlob);
+        finally
+          Stream.Free;
+        end;
+      end;
+      Q.ParamByName('name').AsString := Name;
+      Q.ExecSQL;
+    finally
+      Q.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+end;
+
+Procedure TGeopackageReaderTests.ReadAll(out Shapes: TArray<TGISShape>; out Names: TArray<String>);
+var
+  Shape: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  Shapes := [];
+  Names := [];
+  var Pkg := TGeopackage.Create(FFile);
+  try
+    var Reader := Pkg.CreateReader('shapes');
+    try
+      while Reader.ReadShape(Shape, Props) do
+      begin
+        Shapes := Shapes + [Shape];
+        Names := Names + [String(Props.ValueFromName['name'])];
+      end;
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+end;
+
+Procedure TGeopackageReaderTests.PointZ_DropsZ;
+// Geometry type 1001 is a point with a Z coordinate
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow(Header(1) + [1] + LE32(1001) + LEF64(1) + LEF64(2) + LEF64(99), 'z');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(Ord(stPoint), Ord(Shapes[0].ShapeType), 'Shape type');
+  Assert.AreEqual(1.0, Shapes[0][0,0].X, 1e-12, 'X');
+  Assert.AreEqual(2.0, Shapes[0][0,0].Y, 1e-12, 'Y');
+end;
+
+Procedure TGeopackageReaderTests.PointZM_DropsZAndM;
+// Geometry type 3001 is a point with Z and M coordinates
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow(Header(1) + [1] + LE32(3001) + LEF64(1) + LEF64(2) + LEF64(99) + LEF64(98), 'zm');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(1.0, Shapes[0][0,0].X, 1e-12, 'X');
+  Assert.AreEqual(2.0, Shapes[0][0,0].Y, 1e-12, 'Y');
+end;
+
+Procedure TGeopackageReaderTests.BigEndian_IsRead;
+// Byte order 0 is big-endian, for the type and the coordinates alike
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow(Header(1) + [0] + BE32(1) + BEF64(1) + BEF64(2), 'be');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(1.0, Shapes[0][0,0].X, 1e-12, 'X');
+  Assert.AreEqual(2.0, Shapes[0][0,0].Y, 1e-12, 'Y');
+end;
+
+Procedure TGeopackageReaderTests.Envelope_IsSkipped;
+// Flags 3: little-endian with an XY envelope of four doubles before the geometry
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow(Header(3) + LEF64(1) + LEF64(1) + LEF64(2) + LEF64(2) + Point(1, 2), 'env');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(1.0, Shapes[0][0,0].X, 1e-12, 'X');
+  Assert.AreEqual(2.0, Shapes[0][0,0].Y, 1e-12, 'Y');
+end;
+
+Procedure TGeopackageReaderTests.NullGeometry_IsSkipped;
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow([], 'nothing');
+  InsertRow(Header(1) + Point(1, 2), 'something');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual('something', Names[0]);
+end;
+
+Procedure TGeopackageReaderTests.EmptyGeometry_IsSkipped;
+// Bit 4 of the flags marks an empty geometry
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow(Header($11), 'empty');
+  InsertRow(Header(1) + Point(1, 2), 'something');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual('something', Names[0]);
+end;
+
+Procedure TGeopackageReaderTests.MultiPoint_IsOneShapePerPoint_SharingTheProperties;
+// Geometry type 4, holding two points
+var
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  InsertRow(Header(1) + [1] + LE32(4) + LE32(2) + Point(1, 2) + Point(3, 4), 'both');
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(2, Integer(Length(Shapes)), 'Shapes');
+  Assert.AreEqual(3.0, Shapes[1][0,0].X, 1e-12, 'Second point X');
+  Assert.AreEqual('both', Names[0]);
+  Assert.AreEqual('both', Names[1]);
+end;
+
+Procedure TGeopackageReaderTests.MultiLineString_RoundTrip_IsOneShapeWithAPartPerLine;
+var
+  Written: TGISShape;
+  Parts: TMultiPoints;
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(0, 0), TCoordinate.Create(1, 1)];
+  Parts[1] := [TCoordinate.Create(2, 2), TCoordinate.Create(3, 3), TCoordinate.Create(4, 4)];
+  Written.AssignPolyLine(Parts);
+  var Pkg := TGeopackage.Create(FFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('shapes', 4326, ['name']);
+      try
+        LW.WriteShape(Written, [TPair<String,Variant>.Create('name', 'lines')]);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(Ord(stLine), Ord(Shapes[0].ShapeType), 'Shape type');
+  Assert.AreEqual(2, Shapes[0].Count, 'Parts');
+  Assert.AreEqual(3, Shapes[0].Parts[1].Count, 'Points of the second part');
+end;
+
+Procedure TGeopackageReaderTests.MultiPolygon_RoundTrip_IsOneShapeWithAllRings;
+var
+  Written: TGISShape;
+  Parts: TMultiPoints;
+  Shapes: TArray<TGISShape>;
+  Names: TArray<String>;
+begin
+  SetLength(Parts, 2);
+  Parts[0] := [TCoordinate.Create(0, 0), TCoordinate.Create(1, 0), TCoordinate.Create(1, 1), TCoordinate.Create(0, 1)];
+  Parts[1] := [TCoordinate.Create(3, 0), TCoordinate.Create(4, 0), TCoordinate.Create(4, 1), TCoordinate.Create(3, 1)];
+  Written.AssignPolyPolygon(Parts);
+  var Pkg := TGeopackage.Create(FFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('shapes', 4326, ['name']);
+      try
+        LW.WriteShape(Written, [TPair<String,Variant>.Create('name', 'islands')]);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  ReadAll(Shapes, Names);
+  Assert.AreEqual(1, Integer(Length(Shapes)));
+  Assert.AreEqual(Ord(stPolygon), Ord(Shapes[0].ShapeType), 'Shape type');
+  Assert.AreEqual(2, Shapes[0].Count, 'Rings');
+end;
+
+Procedure TGeopackageReaderTests.MissingLayer_Raises;
+begin
+  var Pkg := TGeopackage.Create(FFile);
+  try
+    Assert.WillRaise(Procedure begin Pkg.CreateReader('nothing').Free end, Exception);
+  finally
+    Pkg.Free;
+  end;
+end;
+
+Procedure TGeopackageReaderTests.CreateWriter_OnAReadOnlyPackage_Raises;
+begin
+  var Pkg := TGeopackage.Create(FFile);
+  try
+    Assert.WillRaise(Procedure begin Pkg.CreateWriter.Free end, Exception);
+  finally
+    Pkg.Free;
+  end;
+end;
+
 initialization
   TDUnitX.RegisterTestFixture(TGeopackageTests);
+  TDUnitX.RegisterTestFixture(TGeopackageReaderTests);
 
 end.

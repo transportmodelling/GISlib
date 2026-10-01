@@ -264,7 +264,10 @@ Var
 begin
   // Build a column list where the geometry column is explicitly CAST AS BLOB.
   // Without this, FireDAC maps it as varchar (max 32767 bytes) causing an
-  // overflow for any geometry larger than ~32 KB.
+  // overflow for any geometry larger than ~32 KB. FireDAC types an expression
+  // by its value in the first row, so a NULL geometry there would make it a
+  // string after all; a NULL is read as an empty blob instead, which is
+  // skipped as a NULL is.
   var PragmaQuery := TFDQuery.Create(nil);
   try
     ColList := '';
@@ -276,7 +279,7 @@ begin
       if ColList <> '' then ColList := ColList + ', ';
       var ColName := PragmaQuery.FieldByName('name').AsString;
       if SameText(ColName,FGeomColumnName) then
-        ColList := ColList + 'CAST(' + QuotedIdentifier(ColName) + ' AS BLOB) AS ' + QuotedIdentifier(ColName)
+        ColList := ColList + 'CAST(IFNULL(' + QuotedIdentifier(ColName) + ', X'''') AS BLOB) AS ' + QuotedIdentifier(ColName)
       else
         ColList := ColList + QuotedIdentifier(ColName);
       PragmaQuery.Next;
