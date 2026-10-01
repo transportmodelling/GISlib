@@ -121,8 +121,9 @@ begin
     begin
       Inc(ShapeCount);
       BB.Enclose(Shape.BoundingBox);
-      if ShapeCount = 1 then
-        Result := Shape.ShapeType;
+      // The type of the shapes, or stEmpty when they are not all of one type
+      if ShapeCount = 1 then Result := Shape.ShapeType else
+      if Shape.ShapeType <> Result then Result := stEmpty;
     end;
   finally
     Reader.Free;
@@ -135,22 +136,16 @@ var
   BB: TCoordinateRect;
 begin
   CountAndBounds(DataPath + 'Provincies_dutch_grid.shp', Count, BB);
-  Assert.IsTrue(Count > 0, 'Should read at least one shape');
+  Assert.AreEqual(12, Count, 'The twelve provinces');
 end;
 
 Procedure TESRIShapeFileReaderTests.DutchGrid_AllShapesArePolygons;
 var
-  Reader: TESRIShapeFileReader;
-  Shape: TGISShape;
-  Props: TGISShapeProperties;
+  Count: Integer;
+  BB: TCoordinateRect;
 begin
-  Reader := TESRIShapeFileReader.Create(DataPath + 'Provincies_dutch_grid.shp');
-  try
-    while Reader.ReadShape(Shape, Props) do
-      Assert.AreEqual(Ord(stPolygon), Ord(Shape.ShapeType), 'Every shape must be a polygon');
-  finally
-    Reader.Free;
-  end;
+  Assert.AreEqual(Ord(stPolygon), Ord(CountAndBounds(DataPath + 'Provincies_dutch_grid.shp', Count, BB)),
+                  'Every shape must be a polygon');
 end;
 
 Procedure TESRIShapeFileReaderTests.DutchGrid_BoundingBoxWithinNetherlandsDutchGrid;
@@ -172,22 +167,16 @@ var
   BB: TCoordinateRect;
 begin
   CountAndBounds(DataPath + 'Provincies_wsg84.shp', Count, BB);
-  Assert.IsTrue(Count > 0, 'Should read at least one shape');
+  Assert.AreEqual(12, Count, 'The twelve provinces');
 end;
 
 Procedure TESRIShapeFileReaderTests.WGS84_AllShapesArePolygons;
 var
-  Reader: TESRIShapeFileReader;
-  Shape: TGISShape;
-  Props: TGISShapeProperties;
+  Count: Integer;
+  BB: TCoordinateRect;
 begin
-  Reader := TESRIShapeFileReader.Create(DataPath + 'Provincies_wsg84.shp');
-  try
-    while Reader.ReadShape(Shape, Props) do
-      Assert.AreEqual(Ord(stPolygon), Ord(Shape.ShapeType), 'Every shape must be a polygon');
-  finally
-    Reader.Free;
-  end;
+  Assert.AreEqual(Ord(stPolygon), Ord(CountAndBounds(DataPath + 'Provincies_wsg84.shp', Count, BB)),
+                  'Every shape must be a polygon');
 end;
 
 Procedure TESRIShapeFileReaderTests.WGS84_BoundingBoxWithinNetherlandsWGS84;

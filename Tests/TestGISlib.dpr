@@ -53,7 +53,7 @@ begin
       // Create the test Runner
       var Runner := TDUnitX.CreateRunner;
       Runner.UseRTTI := True;
-      Runner.FailsOnNoAsserts := False;
+      Runner.FailsOnNoAsserts := True;
       // Create loggers
       var ConsoleLogger := TDUnitXConsoleLogger.Create(false);
       var JUnitLogger := TDUnitXXMLJUnitFileLogger.Create(TDUnitX.Options.XMLOutputFile);

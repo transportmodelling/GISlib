@@ -126,8 +126,8 @@ begin
   BB.Left := 0; BB.Right := 100; BB.Bottom := 0; BB.Top := 100;
   FConv.Initialize(BB, 800, 600);
   CentrePx := FConv.CoordToPixel(BB.CenterPoint);
-  Assert.AreEqual(400.0, CentrePx.X, 1.0, 'Centre X should be half pixel width');
-  Assert.AreEqual(300.0, CentrePx.Y, 1.0, 'Centre Y should be half pixel height');
+  Assert.AreEqual(400.0, CentrePx.X, 1e-3, 'Centre X should be half pixel width');
+  Assert.AreEqual(300.0, CentrePx.Y, 1e-3, 'Centre Y should be half pixel height');
 end;
 
 Procedure TCartesianPixelConverterTests.Initialize_WideBoundingBoxSpansPixelWidth;

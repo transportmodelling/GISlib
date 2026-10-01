@@ -207,8 +207,8 @@ begin
   // Amersfoort: Dutch Grid origin at (155000, 463000)
   // Expected WGS84: lon ~ 5.387206 deg, lat ~ 52.155174 deg
   G := FConv.CoordToGeodeticCoord(TCoordinate.Create(155000.0, 463000.0));
-  Assert.AreEqual(5.38720, G.Longitude, 0.0001, 'Amersfoort longitude');
-  Assert.AreEqual(52.15511, G.Latitude, 0.0001, 'Amersfoort latitude');
+  Assert.AreEqual(5.387206, G.Longitude, 1e-5, 'Amersfoort longitude');
+  Assert.AreEqual(52.155174, G.Latitude, 1e-5, 'Amersfoort latitude');
 end;
 
 Procedure TDutchGridConverterTests.RoundTrip_WithinCentimeterAccuracy;
@@ -498,8 +498,7 @@ end;
 
 Procedure TUtmConverterTests.SRSName_ContainsZoneAndHemisphere;
 begin
-  Assert.IsTrue(Pos('31', FConv.SRSName) > 0, 'SRSName should contain zone number');
-  Assert.IsTrue(Pos('N', FConv.SRSName) > 0, 'SRSName should contain hemisphere letter');
+  Assert.AreEqual('WGS 84 / UTM zone 31N', FConv.SRSName);
 end;
 
 Procedure TUtmConverterTests.SRSDefinition_ContainsTransverseMercator;

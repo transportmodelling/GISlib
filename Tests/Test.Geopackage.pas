@@ -45,7 +45,7 @@ type
     // Reader tests
     [Test] Procedure LayerNames_ContainsExpectedLayer;
     [Test] Procedure LayerNames_ReturnsNonEmptyList;
-    [Test] Procedure Reader_ReadsNonZeroShapeCount;
+    [Test] Procedure Reader_ReadsTheTwelveProvinces;
     [Test] Procedure Reader_AllShapesArePolygons;
     [Test] Procedure Reader_BoundingBoxWithinNetherlandsDutchGrid;
     [Test] Procedure Reader_ShapeCountMatchesShapefile;
@@ -67,6 +67,7 @@ type
     [Test] Procedure Writer_NewFile_IdentifiesItselfAsGeoPackage;
     [Test] Procedure Writer_StoresTheLayerBounds;
     [Test] Procedure Writer_ConverterOverload_WritesProperties;
+    [Test] Procedure Writer_PropertiesNamedLikeItsColumns_AreKept;
   end;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -129,7 +130,7 @@ begin
   end;
 end;
 
-Procedure TGeopackageTests.Reader_ReadsNonZeroShapeCount;
+Procedure TGeopackageTests.Reader_ReadsTheTwelveProvinces;
 var
   Pkg: TGeopackage;
   Reader: TGeopackageReader;
@@ -145,7 +146,7 @@ begin
       Count := 0;
       while Reader.ReadShape(Shape, Props) do
         Inc(Count);
-      Assert.IsTrue(Count > 0, 'Reader should return at least one shape');
+      Assert.AreEqual(12, Count, 'The twelve provinces');
     finally
       Reader.Free;
     end;
@@ -160,14 +161,20 @@ var
   Reader: TGeopackageReader;
   Shape: TGISShape;
   Props: TGISShapeProperties;
+  Count: Integer;
 begin
   CheckFileExists;
   Pkg := TGeopackage.Create(GpkgFile);
   try
     Reader := Pkg.CreateReader(GpkgLayerName);
     try
+      Count := 0;
       while Reader.ReadShape(Shape, Props) do
+      begin
         Assert.AreEqual(Ord(stPolygon), Ord(Shape.ShapeType), 'Expected polygon shape type');
+        Inc(Count);
+      end;
+      Assert.AreEqual(12, Count, 'The twelve provinces');
     finally
       Reader.Free;
     end;
@@ -545,57 +552,61 @@ begin
 end;
 
 Procedure TGeopackageTests.Writer_RoundTrip_ProvincesShapefile;
+// The provinces with their attributes, the fields being those of the first shape
 var
   Shape: TGISShape;
   Props: TGISShapeProperties;
-  Written, Read: Integer;
+  Shapes: TArray<TGISShape>;
+  Properties: TArray<TGISShapeProperties>;
+  FieldNames, Names: TArray<String>;
 begin
-  if not FileExists(DataPath + 'Provincies_dutch_grid.shp') then
-    Assert.IsTrue(FileExists(DataPath + 'Provincies_dutch_grid.shp'),
-      'Test requires Data\Provincies_dutch_grid.shp');
+  Assert.IsTrue(FileExists(DataPath + 'Provincies_dutch_grid.shp'), 'Test requires Data\Provincies_dutch_grid.shp');
   DeleteTempFile;
-
-  // Write all shapefile shapes to a new GeoPackage
-  Written := 0;
+  // Read the shapefile
+  var ShpReader := TESRIShapeFileReader.Create(DataPath + 'Provincies_dutch_grid.shp');
+  try
+    while ShpReader.ReadShape(Shape, Props) do
+    begin
+      Shapes := Shapes + [Shape];
+      Properties := Properties + [Props];
+    end;
+  finally
+    ShpReader.Free;
+  end;
+  Assert.AreEqual(12, Integer(Length(Shapes)), 'The twelve provinces');
+  for var Prop in Properties[0] do FieldNames := FieldNames + [Prop.Key];
+  // Write them to a new GeoPackage
   var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
   try
     var Writer := Pkg.CreateWriter;
     try
-      var LW := Writer.CreateLayerWriter('provinces', 28992);
-      var ShpReader := TESRIShapeFileReader.Create(DataPath + 'Provincies_dutch_grid.shp');
+      var LW := Writer.CreateLayerWriter('provinces', 28992, FieldNames);
       try
-        while ShpReader.ReadShape(Shape, Props) do
-        begin
-          LW.WriteShape(Shape, Props);
-          Inc(Written);
-        end;
+        for var I := 0 to High(Shapes) do LW.WriteShape(Shapes[I], Properties[I]);
       finally
-        ShpReader.Free;
+        LW.Free;
       end;
-      LW.Free;
     finally
       Writer.Free;
     end;
   finally
     Pkg.Free;
   end;
-
-  // Read back and verify count
-  Read := 0;
+  // Read them back, with their names
   Pkg := TGeopackage.Create(TempFile);
   try
     var Reader := Pkg.CreateReader('provinces');
     try
-      while Reader.ReadShape(Shape, Props) do
-        Inc(Read);
+      while Reader.ReadShape(Shape, Props) do Names := Names + [String(Props.ValueFromName['statnaam'])];
     finally
       Reader.Free;
     end;
   finally
     Pkg.Free;
   end;
-
-  Assert.AreEqual(Written, Read, 'Round-trip shape count must match');
+  Assert.AreEqual(12, Integer(Length(Names)), 'Shapes read back');
+  for var I := 0 to High(Names) do
+    Assert.AreEqual(String(Properties[I].ValueFromName['statnaam']), Names[I], 'Name of province ' + I.ToString);
   DeleteTempFile;
 end;
 
@@ -862,6 +873,48 @@ begin
       Assert.IsTrue(Reader.ReadShape(Read, Props));
       Assert.AreEqual(4326, Reader.SRID, 'SRID from the converter');
       Assert.AreEqual('Amersfoort', String(Props.ValueFromName['name']));
+    finally
+      Reader.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  DeleteTempFile;
+end;
+
+Procedure TGeopackageTests.Writer_PropertiesNamedLikeItsColumns_AreKept;
+// A shapefile exported by other tools often carries a fid attribute, and the writer has a key
+// column of that name and a geometry column named geom
+var
+  Written, Read: TGISShape;
+  Props: TGISShapeProperties;
+begin
+  DeleteTempFile;
+  Written.AssignPoint(5.4, 52.2);
+  var Pkg := TGeopackage.Create(TempFile, gpReadWrite);
+  try
+    var Writer := Pkg.CreateWriter;
+    try
+      var LW := Writer.CreateLayerWriter('places', 4326, ['fid', 'geom']);
+      try
+        LW.WriteShape(Written, [TPair<String,Variant>.Create('fid', 'A'), TPair<String,Variant>.Create('geom', 'B')]);
+      finally
+        LW.Free;
+      end;
+    finally
+      Writer.Free;
+    end;
+  finally
+    Pkg.Free;
+  end;
+  Pkg := TGeopackage.Create(TempFile);
+  try
+    var Reader := Pkg.CreateReader('places');
+    try
+      Assert.IsTrue(Reader.ReadShape(Read, Props));
+      Assert.AreEqual(5.4, Read[0,0].X, 1e-9, 'The geometry');
+      Assert.AreEqual('A', String(Props.ValueFromName['fid']));
+      Assert.AreEqual('B', String(Props.ValueFromName['geom']));
     finally
       Reader.Free;
     end;

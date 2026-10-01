@@ -145,7 +145,9 @@ begin
   try
     Assert.IsTrue(R.ReadShape(Read, Props));
     Assert.AreEqual(Ord(stPolygon), Ord(Read.ShapeType), 'Shape type');
-    Assert.IsTrue(Read.Count > 0, 'At least one ring');
+    Assert.AreEqual(1, Read.Count, 'One ring');
+    Assert.AreEqual(5, Read.Parts[0].Count, 'Points of the ring');
+    Assert.AreEqual(1.0, Read[0,1].X, 1e-10, 'Second point X');
   finally
     R.Free;
   end;

@@ -122,7 +122,7 @@ type
     // Encloses the bounds of the layer in gpkg_contents in those of the shapes written
     Procedure UpdateBounds;
   public
-    Constructor Create(const Connection: TFDConnection; const LayerName: String;
+    Constructor Create(const Connection: TFDConnection; const LayerName,GeomColumn: String;
                        const SRID: Integer; const PropNames: TArray<String>);
     Procedure WriteShape(const Shape: TGISShape; const Properties: TGISShapeProperties);
     Destructor Destroy; override;
@@ -137,7 +137,9 @@ type
     Procedure ExecSQL(const SQL: String);
     Procedure InitSchema;
     Procedure InsertSRS(SRSID: Integer; const Name,OrgName,Definition: String);
-    Procedure RegisterLayer(const LayerName: String; const SRID: Integer);
+    Procedure RegisterLayer(const LayerName,GeomColumn: String; const SRID: Integer);
+    // The name, or the name with a number, that is not one of the property names
+    Function FreeColumnName(const Name: String; const PropNames: TArray<String>): String;
   public
     Constructor Create(Package: TGeopackage);
     // Add a new feature layer; PropNames lists extra attribute columns (TEXT).
@@ -605,7 +607,7 @@ begin
 end;
 
 Constructor TGeopackageLayerWriter.Create(const Connection: TFDConnection;
-                                          const LayerName: String;
+                                          const LayerName,GeomColumn: String;
                                           const SRID: Integer;
                                           const PropNames: TArray<String>);
 begin
@@ -615,7 +617,7 @@ begin
   FSRID := SRID;
   FPropNames := PropNames;
   // Prepare reusable INSERT statement: the geometry parameter first, then one per property in order
-  var SQL := 'INSERT INTO ' + QuotedIdentifier(LayerName) + ' (geom';
+  var SQL := 'INSERT INTO ' + QuotedIdentifier(LayerName) + ' (' + QuotedIdentifier(GeomColumn);
   for var PropName := low(PropNames) to high(PropNames) do SQL := SQL + ', ' + QuotedIdentifier(PropNames[PropName]);
   SQL := SQL + ') VALUES (:geom';
   for var PropName := low(PropNames) to high(PropNames) do SQL := SQL + ', :p' + IntToStr(PropName);
@@ -850,7 +852,7 @@ begin
     'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]');
 end;
 
-Procedure TGeopackageWriter.RegisterLayer(const LayerName: String; const SRID: Integer);
+Procedure TGeopackageWriter.RegisterLayer(const LayerName,GeomColumn: String; const SRID: Integer);
 // Registers the layer's table in gpkg_contents and its geometry column in gpkg_geometry_columns
 begin
   var Query := TFDQuery.Create(nil);
@@ -866,12 +868,32 @@ begin
     Query.SQL.Text :=
       'INSERT OR IGNORE INTO gpkg_geometry_columns ' +
       '(table_name, column_name, geometry_type_name, srs_id, z, m) ' +
-      'VALUES (:name, ''geom'', ''GEOMETRY'', :srid, 0, 0)';
+      'VALUES (:name, :geom, ''GEOMETRY'', :srid, 0, 0)';
     Query.ParamByName('name').AsString := LayerName;
+    Query.ParamByName('geom').AsString := GeomColumn;
     Query.ParamByName('srid').AsInteger := SRID;
     Query.ExecSQL;
   finally
     Query.Free;
+  end;
+end;
+
+Function TGeopackageWriter.FreeColumnName(const Name: String; const PropNames: TArray<String>): String;
+begin
+  Result := Name;
+  var Number := 1;
+  var Taken := true;
+  while Taken do
+  begin
+    Taken := false;
+    for var PropName in PropNames do
+    if SameText(PropName,Result) then
+    begin
+      Taken := true;
+      Inc(Number);
+      Result := Name + IntToStr(Number);
+      Break;
+    end;
   end;
 end;
 
@@ -881,9 +903,11 @@ Function TGeopackageWriter.CreateLayerWriter(const LayerName: String;
 var
   SQL: String;
 begin
-  // Feature table
+  // Feature table; a property may be named like the key or the geometry column, which then take another name
+  var KeyColumn := FreeColumnName('fid',PropNames);
+  var GeomColumn := FreeColumnName('geom',PropNames);
   SQL := 'CREATE TABLE IF NOT EXISTS ' + QuotedIdentifier(LayerName) +
-         ' (fid INTEGER PRIMARY KEY AUTOINCREMENT, geom BLOB';
+         ' (' + QuotedIdentifier(KeyColumn) + ' INTEGER PRIMARY KEY AUTOINCREMENT, ' + QuotedIdentifier(GeomColumn) + ' BLOB';
   for var Idx := 0 to High(PropNames) do SQL := SQL + ', ' + QuotedIdentifier(PropNames[Idx]) + ' TEXT';
   SQL := SQL + ')';
   ExecSQL(SQL);
@@ -893,9 +917,9 @@ begin
   InsertSRS(SRID, 'EPSG:' + IntToStr(SRID), 'EPSG', 'undefined');
 
   // Register metadata
-  RegisterLayer(LayerName,SRID);
+  RegisterLayer(LayerName,GeomColumn,SRID);
 
-  Result := TGeopackageLayerWriter.Create(FConnection,LayerName,SRID,PropNames);
+  Result := TGeopackageLayerWriter.Create(FConnection,LayerName,GeomColumn,SRID,PropNames);
 end;
 
 Function TGeopackageWriter.CreateLayerWriter(const LayerName: String; const SRID: Integer): TGeopackageLayerWriter;
