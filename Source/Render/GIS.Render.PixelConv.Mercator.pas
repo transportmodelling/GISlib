@@ -217,7 +217,7 @@ begin
   if FInitialized then
   begin
     var DeltaZoom := 1;
-    var ZoomFac := 2.0;
+    var ZoomFac: Float64 := 2.0;
     var HorizZoom := FPixelWidth/Pixels.Width;
     var VertZoom := FPixelHeight/Pixels.Height;
     if HorizZoom < VertZoom then

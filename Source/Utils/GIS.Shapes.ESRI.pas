@@ -479,7 +479,7 @@ Function TESRIPolygonShapeFileWriter.Oriented(const Ring: TShapePart; const Cloc
 // Twice the signed area of a closed ring is positive when it runs counter-clockwise
 begin
   Result := Ring.AsMultiPoint;
-  var Area := 0.0;
+  var Area: Float64 := 0.0;
   for var Point := 1 to high(Result) do
   Area := Area + Result[Point-1].X*Result[Point].Y - Result[Point].X*Result[Point-1].Y;
   if (Area < 0) <> Clockwise then
